@@ -9,6 +9,8 @@ extension brings a heavy streaming session down to **~10–16% of a core** with
 
 Pure monkey-patch, loaded into pi's own process. No pi-tui fork, no config.
 
+![pi-render-cache: CPU per streaming session ~105% → ~13%, seg 94–99.6% / md 70% hit-rate](assets/screenshot.png)
+
 ---
 
 ## The problem (measured, not guessed)
