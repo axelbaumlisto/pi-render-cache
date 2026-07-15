@@ -113,6 +113,23 @@ Nothing to configure — it installs both patches on load and self-checks.
   zero activity (e.g. a future pi stopped using `Intl.Segmenter`), it self-disables
   and notifies — fail-safe, never silently wrong.
 
+## Upstream context
+
+Both root causes are already known upstream and remain unfixed in the core
+(measured on pi 0.80.7):
+
+- **[earendil-works/pi#4721](https://github.com/earendil-works/pi/issues/4721)** —
+  *perf(tui): editor wrap/layout repeatedly re-segments lines and graphemes.*
+  Same profile this extension targets (`JSSegmentIterator::Next` ~60%,
+  `CreateSegmentDataObject` ~52%). Auto-closed. → **seg-cache** addresses it.
+- **[earendil-works/pi#3758](https://github.com/earendil-works/pi/issues/3758)** —
+  *Avoid rebuilding assistant message components during token streaming.*
+  The cold-rebuild of the streaming `Markdown` component. Auto-closed. →
+  **md-cache** addresses it.
+
+pi's core is intentionally minimal and these live outside it, so this extension
+is the pragmatic fix: no fork, no core change, drop-in.
+
 ## Limitations
 
 - **Thinking blocks** stream through the fallback path (they carry a per-message
