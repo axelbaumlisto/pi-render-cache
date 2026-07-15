@@ -80,17 +80,17 @@ identical un-patched session running side by side.
 ## Install
 
 ```bash
-# as a pi package (recommended)
-pi install pi-render-cache
+pi install npm:pi-render-cache
 ```
 
-or via npm into your pi extensions:
+Project-local (writes to `.pi/settings.json`, shareable with your team):
 
 ```bash
-npm install pi-render-cache
+pi install -l npm:pi-render-cache
 ```
 
-Then it auto-loads on the next `pi` start. Verify with `/rcstats`.
+It auto-loads on the next `pi` start. Verify with `/rcstats`.
+Requires pi with `@earendil-works/pi-tui` (resolved automatically as a peer).
 
 ## Usage
 

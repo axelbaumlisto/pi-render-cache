@@ -1,6 +1,6 @@
 {
   "name": "pi-render-cache",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Cuts pi coding-agent TUI CPU during streaming from ~105% of a core to ~10-16% by memoizing Intl.Segmenter (ICU grapheme segmentation) and incrementally caching Markdown.render",
   "type": "module",
   "license": "MIT",
