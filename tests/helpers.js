@@ -3,9 +3,15 @@
  * pi-tui is NEVER a dependency of this plugin (same-registry guarantee, see PLAN.md).
  */
 
-const PI_ROOT = "/Users/shamash/local/lib/node_modules/@earendil-works/pi-coding-agent";
-const PI_TUI_PATH = `${PI_ROOT}/node_modules/@earendil-works/pi-tui/dist/index.js`;
-const THEME_PATH = `${PI_ROOT}/dist/modes/interactive/theme/theme.js`;
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Resolve peer dev dependencies from the current installation. Never hardcode
+// a developer machine path: tests must work in clones, CI, and Pi's package dir.
+const PI_TUI_PATH = fileURLToPath(import.meta.resolve("@earendil-works/pi-tui"));
+const PI_AGENT_ENTRY = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"));
+const PI_AGENT_DIST = dirname(PI_AGENT_ENTRY);
+const THEME_PATH = join(PI_AGENT_DIST, "modes/interactive/theme/theme.js");
 
 /** @returns {Promise<object>} pi-tui module namespace (Markdown, getCapabilities, ...) */
 export async function loadPiTui() {

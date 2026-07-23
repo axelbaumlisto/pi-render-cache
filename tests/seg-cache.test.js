@@ -144,32 +144,23 @@ test("char-budget eviction (FIFO) and >4KB bypass", () => {
 	}
 });
 
-test("perf soft-gate: repeated RU string ≥10× faster than native", () => {
+test("cached RU path: one miss then O(1) identity hits without ICU work", () => {
 	install();
 	try {
 		const str = "Съешь же ещё этих мягких французских булок, да выпей чаю. ".repeat(4);
 		const seg = new Intl.Segmenter("ru", { granularity: "word" });
-		const natSeg = new Intl.Segmenter("ru", { granularity: "word" });
-		// warm both paths (cache fill + JIT)
-		for (let i = 0; i < 10; i++) {
-			[...seg.segment(str)];
-			[...nativeSegment.call(natSeg, str)];
+		const before = getStats();
+		const cached = seg.segment(str);
+		assert.equal(getStats().misses, before.misses + 1, "first call fills exactly one cache entry");
+
+		const stats = getStats();
+		for (let i = 0; i < 1000; i++) {
+			assert.equal(seg.segment(str), cached, "hot path returns the cached iterable object");
 		}
-		const N = 1000;
-		const timeNs = (fn) => {
-			const t0 = process.hrtime.bigint();
-			for (let i = 0; i < N; i++) fn();
-			return Number(process.hrtime.bigint() - t0);
-		};
-		// Soft gate: best-of-5 per side to shave scheduler/GC noise off a ~ms-scale sample.
-		let patchedNs = Infinity;
-		let nativeNs = Infinity;
-		for (let trial = 0; trial < 5; trial++) {
-			patchedNs = Math.min(patchedNs, timeNs(() => [...seg.segment(str)]));
-			nativeNs = Math.min(nativeNs, timeNs(() => [...nativeSegment.call(natSeg, str)]));
-		}
-		const speedup = nativeNs / patchedNs;
-		assert.ok(speedup >= 10, `soft perf gate: expected ≥10× speedup, got ${speedup.toFixed(1)}×`);
+		const after = getStats();
+		assert.equal(after.hits, stats.hits + 1000, "every repeat is an O(1) cache hit");
+		assert.equal(after.misses, stats.misses, "hot path performs no additional ICU segmentation");
+		assert.equal(after.fallbacks, stats.fallbacks, "hot path never falls back to native");
 	} finally {
 		uninstall();
 	}

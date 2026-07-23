@@ -25,6 +25,7 @@ import {
 	install as installSeg,
 	uninstall as uninstallSeg,
 } from "../src/seg-cache.js";
+import { createReloadLifecycle } from "../src/reload-lifecycle.js";
 
 const MD_STATE_KEY = Symbol.for("render-cache:md:v1");
 const SELF_CHECK_MS = 2000;
@@ -37,6 +38,9 @@ function hashString(str: string): string {
 }
 
 export default function (pi: ExtensionAPI) {
+	const lifecycle = createReloadLifecycle();
+	pi.on("session_shutdown", () => lifecycle.dispose());
+
 	// Version-drift guard BEFORE install: existing state whose patch is no longer
 	// on the prototype AND the current render doesn't hash to the stored original
 	// → someone replaced render mid-process; stitching against it would be unsound.
@@ -57,15 +61,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("message_update", (_event, ctx) => {
 		if (armed) return;
 		armed = true;
-		const timer = setTimeout(() => {
+		lifecycle.schedule(() => {
 			const s = mdStats();
 			if (s.hits + s.misses + s.fallbacks === 0) {
 				uninstallMd();
 				uninstallSeg();
-				ctx.ui.notify("render-cache: patch inactive, self-disabled", "warning");
+				try {
+					ctx.ui.notify("render-cache: patch inactive, self-disabled", "warning");
+				} catch {
+					// Teardown may race after the current-instance check. Never crash Pi.
+				}
 			}
 		}, SELF_CHECK_MS);
-		timer.unref?.();
 	});
 
 	pi.registerCommand("rcstats", {
