@@ -45,6 +45,9 @@
     "test": "node --test tests/",
     "compat": "node scripts/check-upstream.mjs",
     "compat:matrix": "node scripts/install-fixture.mjs --all --check",
+    "benchmark": "node scripts/benchmark.mjs",
+    "benchmark:evaluate": "node scripts/evaluate-benchmark.mjs",
+    "premise": "node scripts/benchmark.mjs --blocks 20 --output .bench-results/premise-raw.json && node scripts/evaluate-benchmark.mjs --mode premise --input .bench-results/premise-raw.json",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm pack --dry-run",
     "prepublishOnly": "npm run check"
