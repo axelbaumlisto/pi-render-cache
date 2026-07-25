@@ -1,7 +1,7 @@
 {
 	"schema": "pi-render-cache/promoted-evidence/v1",
-	"release": "v1.1.0-rc",
-	"promotedAt": "2026-07-25T23:01:59.006Z",
+	"release": "v1.1.0",
+	"promotedAt": "2026-07-25T23:29:33.350Z",
 	"raw": {
 		"fileBasename": "premise-raw.json",
 		"sha256": "233f3b319b655876ffb14063c4f2d5a6e5b6d9b1c5997f28fb4728f75468b8c9"

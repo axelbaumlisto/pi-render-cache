@@ -1,83 +1,68 @@
 # pi-render-cache
 
-**Stops a [pi](https://github.com/earendil-works/pi-coding-agent) coding-agent session from pinning a full CPU core while the model streams.**
+**Reduces pi coding-agent TUI rendering work while a model streams, without changing rendered output.**
 
-A long-running interactive `pi` session burns **~100% of one core per streaming
-turn** — several open sessions saturate the machine and push it into swap. This
-extension brings a heavy streaming session down to **~10–16% of a core** with
-**zero visible change** to the rendered output.
+The extension applies two independent, bounded caches inside pi's process: one for repeated `Intl.Segmenter` results and one for stable prefixes of unstyled streaming Markdown. Each patch has its own compatibility and ownership state and falls back to the original implementation on unsupported input.
 
-Pure monkey-patch, loaded into pi's own process. No pi-tui fork, no config.
+No pi-tui fork and no configuration are required.
 
-![pi-render-cache: CPU per streaming session ~105% → ~13%, seg 94–99.6% / md 70% hit-rate](assets/screenshot.png)
+![pi-render-cache live-session CPU and cache statistics](assets/screenshot.png)
 
 ---
 
-## The problem (measured, not guessed)
+## The problem
 
-A `spindump` of a session stuck at 100% CPU shows the hot path is **not** the LLM
-or the network — it is the terminal **re-render**:
+The relevant hot path is terminal re-rendering, not model or network work:
 
 ```
-uv__run_timers → Environment::RunTimers            (pi-tui render timer, ≤60 fps)
+pi-tui render timer
   → Markdown.render → line wrap/truncate
-    → Intl.Segmenter grapheme iteration → ICU BreakIterator   ← the fire
+    → Intl.Segmenter grapheme iteration
 ```
 
-Two independent causes stack up:
+Two independent costs stack up:
 
-1. **`Intl.Segmenter` has no cache.** pi-tui measures text width by iterating
-   Unicode grapheme clusters through ICU on *every* wrap/truncate call. Any
-   non-ASCII content (Cyrillic, Thai, emoji — and the box-drawing chars in pi's
-   own UI) misses the ASCII fast-path and re-segments from scratch each frame.
-2. **The streaming message is cold-rebuilt every chunk.**
-   `AssistantMessageComponent.updateContent()` calls `clear()` + `new Markdown(...)`
-   on *every* `message_update` (i.e. every token delta), throwing away pi-tui's own
-   per-instance `cachedLines`. So the entire message-so-far is re-lexed, re-wrapped
-   and re-segmented up to 60×/second — cost grows linearly with the answer length.
+1. **Repeated segmentation.** pi-tui repeatedly segments non-ASCII text while measuring, wrapping, and truncating terminal content.
+2. **Cold Markdown rebuilds.** During streaming, `AssistantMessageComponent.updateContent()` clears its content container and creates a fresh `Markdown` component for every update, discarding the component's per-instance line cache.
 
 ## What it does
 
-Two surgical patches, each independently useful, each falling back to the
-original renderer on any doubt:
-
 | Patch | Target | Effect |
-|-------|--------|--------|
-| **seg-cache** | `Intl.Segmenter.prototype.segment` | Memoizes grapheme/word segmentation (LRU by `locale∙granularity∙string`, char-budgeted). Spread-of-native records → exact per-granularity shape; ASCII fast-path; `containing()` delegation. |
-| **md-cache** | `Markdown.prototype.render` | Splits the streaming text into a **settled prefix** (stable across frames) + a **growing tail**; caches prefix lines globally by `(prefix, width, paddingX, themeFingerprint, hyperlinks)` and only re-renders the tail. Neutralizes the cold-rebuild. |
+|---|---|---|
+| **seg-cache** | `Intl.Segmenter.prototype.segment` | Memoizes grapheme/word segmentation by locale, granularity, and input. It preserves native record shapes and `containing()` behavior, returns fresh arrays, and uses bounded retained-cost accounting. |
+| **md-cache** | `Markdown.prototype.render` | Splits unstyled streaming text into a settled prefix and growing tail, caches byte-identical prefix lines by render inputs and a hardened complete-theme fingerprint, and renders only the tail again. |
 
-## Metrics
+The patches are installed and evaluated independently. Runtime states are `active`, `unsupported`, or `ownership-lost`; one patch failing never removes the other.
 
-Measured on Apple M3, Node 22.23, real sessions with the extension loaded vs. an
-identical un-patched session running side by side.
+## Measurements
 
-### CPU during streaming (per session)
+### Controlled replay: pi 0.82.1
+
+The v1.1.0 release replay used Apple M3, Node 22.23.0, pi/pi-tui 0.82.1, and 20 randomized complete blocks per workload. Values are median baseline/mode speedups with paired 95% whole-block bootstrap CIs.
+
+| Workload | seg-cache | md-cache | both |
+|---|---:|---:|---:|
+| Ordinary streaming Markdown | 1.38× [1.30, 1.60] | 16.70× [14.97, 18.25] | **21.22× [20.03, 23.68]** |
+| Styled thinking | 1.61× [1.52, 1.69] | 1.01× [0.87, 1.08] (fallback by design) | **1.64× [1.57, 1.70]** |
+| Unicode visible-width work | 2.79× [2.50, 3.13] | n/a | **2.97× [2.84, 3.11]** |
+
+Every replay cut point was byte-identical. The sanitized evidence, memory deltas, environment, and hashes are in [`evidence/v1.1.0/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.0/evidence/v1.1.0/summary.json); methodology and upstream state are in [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md). From a source checkout, reproduce the release workload with `npm run premise`.
+
+### Live-session observations: pi 0.80.7, 2026-07
+
+These Apple M3 / Node 22.23 observations are ecological checks, not controlled benchmark evidence. Model/network timing and session content were not used for the release ratios above.
 
 | Scenario | Baseline | With extension |
-|---|---|---|
-| Heavy agent session (subagents streaming) | **~105%** of a core | **~37%** |
-| 97 MB resumed session, long-markdown stream (opus, fast small chunks) | **~105%** | **~10–16%** |
-| Same, large-chunk model (gpt-5.5) | **~105%** | **~8–10%** |
+|---|---:|---:|
+| Heavy agent session (subagents streaming) | ~105% of one core | ~37% |
+| 97 MB resumed session, long Markdown stream (fast small chunks) | ~105% | ~10–16% |
+| Same session, large-chunk model | ~105% | ~8–10% |
 
-**~65–90 percentage-point drop.** Idle sessions were already ~0% and stay ~0%.
-
-### Cache hit-rates (live `/rcstats`)
-
-| Cache | Hit-rate | Notes |
-|---|---|---|
-| **seg-cache** | **94–99.6%** | e.g. `3,902,590 hits / 17,177 misses` in one session — the dominant win, exactly the `spindump` hotspot. |
-| **md-cache** | **70%** on fast-streaming models (opus) | Dormant on models that stream in large infrequent chunks — seg-cache alone already covers those. |
+Live `/rcstats` observations included seg-cache hit rates of 94–99.6% and md-cache around 70% on fast, small-chunk streams. These rates depend on content and chunking and are not release gates.
 
 ### Correctness
 
-- **64 automated tests**, byte-for-byte: patched `render()` output `===` the
-  original on a markdown corpus × widths `[20, 24, 47, 80]`, plus an adversarial
-  corpus (reference-link defs across the split, unclosed HTML blocks, `<a>`
-  autolink-state leaks, list-continuation, fenced code, CRLF, RU/Thai/emoji).
-- **Fuzz gate**: 6,500+ random-document byte-diffs, 0 failures.
-- The split is *conservative by construction* — any construct that could make
-  `render(prefix)+render(tail) ≠ render(full)` forces a full fallback to the
-  original renderer. Worst case is lost speed-up, never wrong output.
+The current deterministic suite contains **83 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
 
 ## Install
 
@@ -85,63 +70,79 @@ identical un-patched session running side by side.
 pi install npm:pi-render-cache
 ```
 
-Project-local (writes to `.pi/settings.json`, shareable with your team):
+Project-local installation (writes `.pi/settings.json`):
 
 ```bash
 pi install -l npm:pi-render-cache
 ```
 
-It auto-loads on the next `pi` start. Verify with `/rcstats`.
-Requires pi with `@earendil-works/pi-tui` (resolved automatically as a peer).
+The extension loads on the next pi start. Node `>=22.19.0` is required.
 
 ## Usage
 
-Nothing to configure — it installs both patches on load and self-checks.
+There is nothing to configure. Run:
 
-- `/rcstats` — one-line hit/miss/fallback counters for both caches.
+```text
+/rcstats
+```
+
+`/rcstats` reports each patch's lifecycle state and reason, live ownership, hit/miss/fallback counters, cache size and estimated retained-cost total, plus the selected pi and pi-tui versions. An `ownership-lost` result requires a restart or manual removal of the conflicting wrapper; the extension never layers another wrapper over it.
+
+## Compatibility
+
+A supported compatibility unit is one selected pi installation and the pi-tui copy resolved from it.
+
+| pi | pi-tui | Node | md-cache | seg-cache |
+|---|---|---|---|---|
+| 0.80.7 | locked transitive 0.80.7 | `>=22.19.0` | active after canaries | active after canaries |
+| 0.82.1 | locked transitive 0.82.1 | `>=22.19.0` | active after canaries | active after canaries |
+| Other/future | resolved from selected pi | host-compatible | disables itself as unsupported until allowlisted | evaluated independently; active only if the native Segmenter canary passes |
+
+Unknown pi versions therefore do not cause an all-or-nothing shutdown: md-cache refuses unknown Markdown/theme implementations, while seg-cache can remain active if its independent structural and differential checks pass.
 
 ## Safety
 
-- **Same-process, same-prototype.** pi-tui is imported via its bare specifier, which
-  pi's loader aliases to its own copy — the patch lands on the exact prototype pi
-  renders with. pi-tui is a `peerDependency`, never bundled.
-- **Idempotent** across `/reload` and session switch (shared state on a
-  `Symbol.for` slot, adopt-on-reinstall). `uninstall()` restores the original only
-  if it still owns the method — never clobbers another extension's wrapper.
-- **Version-drift guard.** If pi's `Markdown.render` changed underneath (pi upgrade),
-  the extension detects the hash mismatch and refuses to install rather than stitch
-  against an unknown renderer.
-- **Event-gated self-check.** If, after the first `message_update`, the patch shows
-  zero activity (e.g. a future pi stopped using `Intl.Segmenter`), it self-disables
-  and notifies — fail-safe, never silently wrong.
+- **Independent lifecycle.** Compatibility failure in one patch does not uninstall or misreport the other. Counters are observability only, not self-disable triggers.
+- **Ownership-safe reloads.** Shared symbol state permits adoption across `/reload`; uninstall restores an original only while the extension still owns the method. Foreign wrappers produce `ownership-lost`, never wrapper layering.
+- **Conservative Markdown scope.** Non-null `defaultTextStyle`, non-empty options, unsafe split boundaries, non-matching themes, throws, and oversized fingerprint outputs use the untouched original renderer.
+- **Hardened supported-theme key.** The complete renderer-consumed theme surface, capabilities, render inputs, and implementation identity are length-framed and fingerprinted. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.
+- **Bounded storage.** Both caches account conservatively for retained keys and values, enforce per-entry and total limits, and skip entries that exceed them.
+
+## Verification
+
+The shipped compatibility diagnostic can be run from the package directory:
+
+```bash
+npm run compat
+```
+
+The benchmark engine and test fixtures are repository tooling, not included in the npm tarball. From a source checkout:
+
+```bash
+npm run verify          # 83 tests, typecheck, selected-unit compat, exact pack manifest
+npm run compat:matrix   # locked pi 0.80.7 and 0.82.1 fixtures
+npm run premise         # full 20-block controlled replay and evaluator
+npm run test:perf       # short 3-block maintainer check; not release evidence
+```
 
 ## Upstream context
 
-Both root causes are already known upstream and remain unfixed in the core
-(measured on pi 0.80.7):
+As checked on 2026-07-25, pi 0.82.1 (`b4f293684bba718d59cc1157679bcf6157b3a7f5`) and upstream `main` still contain both hot paths.
 
-- **[earendil-works/pi#4721](https://github.com/earendil-works/pi/issues/4721)** —
-  *perf(tui): editor wrap/layout repeatedly re-segments lines and graphemes.*
-  Same profile this extension targets (`JSSegmentIterator::Next` ~60%,
-  `CreateSegmentDataObject` ~52%). Auto-closed. → **seg-cache** addresses it.
-- **[earendil-works/pi#3758](https://github.com/earendil-works/pi/issues/3758)** —
-  *Avoid rebuilding assistant message components during token streaming.*
-  The cold-rebuild of the streaming `Markdown` component. Auto-closed. →
-  **md-cache** addresses it.
+- [#6665](https://github.com/earendil-works/pi/issues/6665) is open, assigned, and in progress.
+- [#7017](https://github.com/earendil-works/pi/pull/7017) and [#7082](https://github.com/earendil-works/pi/pull/7082) were closed without merge and address complementary outer rendering layers; neither removes both inner cache targets.
+- [#6792](https://github.com/earendil-works/pi/issues/6792) was retracted by its reporter as an extension fault and is not evidence for this core issue.
+- Historical reports [#4721](https://github.com/earendil-works/pi/issues/4721) and [#3758](https://github.com/earendil-works/pi/issues/3758) describe the segmentation and streaming-component rebuild profiles respectively.
 
-pi's core is intentionally minimal and these live outside it, so this extension
-is the pragmatic fix: no fork, no core change, drop-in.
+See [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md) for exact source links, release evidence, and the independent retirement criteria.
 
 ## Limitations
 
-- **Thinking blocks** stream through the fallback path (they carry a per-message
-  text style), so thinking-heavy turns see a smaller md-cache win. seg-cache still
-  applies.
-- md-cache only helps models that stream in **many small chunks**; large-chunk
-  models get their win almost entirely from seg-cache.
-- The real long-term fix belongs upstream in pi-tui (don't cold-rebuild the
-  streaming component; cache grapheme width). This extension is a zero-fork
-  stop-gap that needs no changes to pi.
+- **Styled thinking is deliberately not md-cached.** Its non-null text style forces the original Markdown renderer; this unchanged behavior is now enforced and tested. seg-cache remains active and measured about 1.6× in controlled thinking replay.
+- md-cache mainly helps models that stream many small chunks. Large, infrequent chunks receive proportionally more benefit from seg-cache.
+- Matching core-signature theme callbacks are supported only when deterministic, side-effect-free, and input-transparent. Deliberately spoofed or stateful callbacks are unsupported.
+- Retained-cost figures are conservative estimates, not measured heap-byte guarantees. For backward compatibility, the legacy 2,000,000-unit setting is scaled to effective budgets of 8,000,000 units for md-cache and 16,000,000 for seg-cache; per-entry limits remain one quarter of each total.
+- Each patch remains a stopgap and is retired independently only after a released upstream version passes the documented structural-no-work or statistical-equivalence route.
 
 ## License
 
