@@ -6,11 +6,21 @@
  * budget cache; only the growing tail is re-rendered per frame. Any doubt at
  * any point → orig.call(this, width) (correct by construction, PLAN.md I1/I6).
  *
- * Cache key: settled + width + paddingX + themeFingerprint + hyperlinksBit.
- * - themeFingerprint is computed EVERY patched render: pi's theme is a proxy
- *   over globalThis — /theme switching changes output for the SAME theme
- *   object, so identity keying would serve stale ANSI (ROUND2_review_2.md §2).
+ * Cache key: length-framed settled/width/padding/signature/fingerprint/capabilities.
+ * - Theme source signatures are compatibility gates, NOT authentication. A
+ *   matching theme contract requires deterministic, side-effect-free,
+ *   input-transparent callbacks. Deliberately spoofed/stateful callbacks are
+ *   unsupported; ordinary non-matching themes reach original render without
+ *   any analysis callback invocation.
+ * - The bounded output fingerprint is computed EVERY patched render after the
+ *   signature gate: pi's functions close over a global theme proxy, so /theme
+ *   switching changes output without changing function identity or source.
  * - paddingX is a key component, NOT a fallback (hot path always paddingX=1).
+ *
+ * Budget cost units are conservative retained-cost estimates, not source chars.
+ * The effective default is 8,000,000 units (≈7,813 KiB of estimated retention,
+ * not a heap-byte guarantee). Legacy budgetChars inputs are scaled by 4 so the
+ * extension's existing 2,000,000 setting receives that effective default.
  *
  * Module is import-free of pi-tui: the Markdown class and getCapabilities are
  * passed into install() (extension/tests provide them). Shared state lives on
@@ -21,26 +31,139 @@ import { splitSettled } from "./split.js";
 import { makeBudgetCache, makeCounters } from "./stats.js";
 
 const STATE_KEY = Symbol.for("render-cache:md:v1");
+const MAX_THEME_COMPONENT_CHARS = 2048;
+const MAX_THEME_FINGERPRINT_CHARS = 32 * 1024;
+const MAX_ENTRY_BUDGET_DIVISOR = 4;
+const LEGACY_BUDGET_CHARS_DEFAULT = 2_000_000;
+const COST_UNIT_SCALE = 4;
+const THEME_SIGNATURE_CACHE = new WeakMap();
 
-/** djb2 hash → hex string; used for version-drift detection of the original render. */
+// Task 4 calibration: observed retained-cost/source-char ratios were ~8–9×
+// for md entries. A 4× legacy-input scale restores substantial capacity while
+// keeping the conservative hard bound; Tasks 6/7 may later pass calibrated
+// values directly after revisiting this compatibility contract.
+
+// Locked getMarkdownTheme() callback sources for pi 0.80.7 and 0.82.1.
+// Keep this table synchronized with compatibility.json.markdownThemeSignature.
+const CORE_THEME_SOURCE_HASHES = Object.freeze({
+	bold: "43793f0e",
+	code: "433573d6",
+	codeBlock: "764046a1",
+	codeBlockBorder: "544bbfdf",
+	heading: "2b6ea36b",
+	highlightCode: "d579802b",
+	hr: "207f1df5",
+	italic: "c12ab783",
+	link: "beebce09",
+	linkUrl: "ef629a9c",
+	listBullet: "31da633f",
+	quote: "3932d489",
+	quoteBorder: "9afb1bc7",
+	strikethrough: "e75a5770",
+	underline: "8d0df633",
+});
+const CORE_THEME_KEYS = Object.freeze(Object.keys(CORE_THEME_SOURCE_HASHES).sort());
+
+/** djb2 hash → hex string; used for compact compatibility/cache identities. */
 export function hashString(str) {
 	let h = 5381;
 	for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
 	return h.toString(16);
 }
 
+/** Length-frame arbitrary string parts; embedded NULs cannot collide. */
+function frameParts(parts) {
+	return parts.map((part) => `${part.length}\0${part}`).join("\0");
+}
+
 /**
- * Short raw-ANSI probe of the theme functions that dominate markdown output.
- * Cheap (O(µs)), and changes whenever the global theme behind pi's proxy does.
+ * Validate the exact supported own-key shape and locked callback sources.
+ * Reading own keys/properties can trigger Proxy traps; callbacks are never
+ * invoked here. Returns a compact identity for the accepted raw/wrapped shape.
+ */
+function themeSignature(theme) {
+	const memoized = THEME_SIGNATURE_CACHE.get(theme);
+	if (memoized !== undefined) return memoized;
+
+	const keys = Reflect.ownKeys(theme);
+	if (keys.some((key) => typeof key !== "string")) return null;
+	keys.sort();
+	const hasIndent = keys.includes("codeBlockIndent");
+	const expectedKeys = hasIndent ? [...CORE_THEME_KEYS, "codeBlockIndent"].sort() : CORE_THEME_KEYS;
+	if (keys.length !== expectedKeys.length || keys.some((key, i) => key !== expectedKeys[i])) return null;
+	if (hasIndent && typeof theme.codeBlockIndent !== "string") return null;
+
+	const signatureParts = [];
+	for (const key of CORE_THEME_KEYS) {
+		const callback = theme[key];
+		if (typeof callback !== "function") return null;
+		const sourceHash = hashString(Function.prototype.toString.call(callback));
+		if (sourceHash !== CORE_THEME_SOURCE_HASHES[key]) return null;
+		signatureParts.push(key, sourceHash);
+	}
+	if (hasIndent) signatureParts.push("codeBlockIndent", "string");
+	const signatureHash = hashString(frameParts(signatureParts));
+	THEME_SIGNATURE_CACHE.set(theme, signatureHash);
+	return signatureHash;
+}
+
+function normalizeThemeOutput(value, arrayExpected = false) {
+	if (!arrayExpected) return typeof value === "string" ? value : null;
+	if (!Array.isArray(value) || value.some((line) => typeof line !== "string")) return null;
+	return frameParts(value);
+}
+
+/**
+ * Complete bounded output fingerprint for fields consumed by Markdown.render.
+ * Every probe is repeated; throws, mismatches, or oversized work reject the
+ * cache path. This runs only after source-signature compatibility succeeds.
  */
 function themeFingerprint(theme) {
-	return (
-		theme.heading("x") +
-		theme.code("x") +
-		theme.listBullet("x") +
-		theme.quote("x") +
-		String(theme.codeBlockIndent ?? "")
-	);
+	const probes = [
+		["heading", ["H"]],
+		["link", ["L"]],
+		["linkUrl", ["https://x"]],
+		["code", ["c"]],
+		["codeBlock", ["b"]],
+		["codeBlockBorder", ["|"]],
+		["quote", ["q"]],
+		["quoteBorder", [">"]],
+		["hr", ["-"]],
+		["listBullet", ["*"]],
+		["bold", ["b"]],
+		["italic", ["i"]],
+		["underline", ["u"]],
+		["strikethrough", ["s"]],
+		// This recognized LLVM probe empirically exercises every palette mapping
+		// consumed by getCliHighlightTheme: comment, keyword, function, variable,
+		// string, number, type, operator, and punctuation.
+		[
+			"highlightCode",
+			[
+				';c\ndefine i8 @f(i8 %x){%v=add i8 %x,1}\n@x=c"s"',
+				"llvm",
+			],
+			true,
+		],
+	];
+	const components = [];
+	let total = 0;
+	for (const [name, args, arrayExpected = false] of probes) {
+		const first = normalizeThemeOutput(theme[name](...args), arrayExpected);
+		const second = normalizeThemeOutput(theme[name](...args), arrayExpected);
+		if (first === null || second === null || first !== second || first.length > MAX_THEME_COMPONENT_CHARS) {
+			return null;
+		}
+		total += name.length + first.length;
+		if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
+		components.push(name, first);
+	}
+	const indent = theme.codeBlockIndent ?? "";
+	if (typeof indent !== "string" || indent.length > MAX_THEME_COMPONENT_CHARS) return null;
+	total += "codeBlockIndent".length + indent.length;
+	if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
+	components.push("codeBlockIndent", indent);
+	return hashString(frameParts(components));
 }
 
 /**
@@ -86,18 +209,26 @@ function makePatchedRender(state) {
 				counters.fallbacks++;
 				return orig.call(this, width);
 			}
-			// (d) Cache key. themeFingerprint every render (proxy theme, see header).
+			// (d) Gate callback compatibility before bounded output probing.
+			const signatureHash = themeSignature(this.theme);
+			if (signatureHash === null) {
+				counters.fallbacks++;
+				return orig.call(this, width);
+			}
+			const fingerprintHash = themeFingerprint(this.theme);
+			if (fingerprintHash === null) {
+				counters.fallbacks++;
+				return orig.call(this, width);
+			}
 			const hyperlinksBit = getCaps().hyperlinks ? "1" : "0";
-			key =
-				settled +
-				"\0" +
-				width +
-				"\0" +
-				this.paddingX +
-				"\0" +
-				themeFingerprint(this.theme) +
-				"\0" +
-				hyperlinksBit;
+			key = frameParts([
+				settled,
+				String(width),
+				String(this.paddingX),
+				signatureHash,
+				fingerprintHash,
+				hyperlinksBit,
+			]);
 		} catch {
 			// Exotic theme/capabilities/text → any doubt means orig.
 			counters.fallbacks++;
@@ -110,7 +241,11 @@ function makePatchedRender(state) {
 		if (prefixLines === undefined) {
 			counters.misses++;
 			prefixLines = orig.call(new Markdown(settled, this.paddingX, 0, this.theme), width);
-			cache.set(key, prefixLines, settled.length);
+			const retainedCost =
+				settled.length + key.length + prefixLines.reduce((sum, line) => sum + line.length, 0);
+			if (retainedCost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) {
+				cache.set(key, prefixLines, retainedCost);
+			}
 		} else {
 			counters.hits++;
 		}
@@ -139,7 +274,7 @@ function makePatchedRender(state) {
  * @param {{Markdown: Function, getCapabilities?: () => {hyperlinks: boolean}, budgetChars?: number}} deps
  * @returns {{installed: boolean, adopted?: boolean, reason?: string}}
  */
-export function install({ Markdown, getCapabilities, budgetChars = 2_000_000 }) {
+export function install({ Markdown, getCapabilities, budgetChars = LEGACY_BUDGET_CHARS_DEFAULT }) {
 	const existing = globalThis[STATE_KEY];
 	if (existing) {
 		const current = existing.Markdown.prototype.render;
@@ -156,7 +291,7 @@ export function install({ Markdown, getCapabilities, budgetChars = 2_000_000 }) 
 	const state = {
 		orig,
 		origHash: hashString(orig.toString()), // version-drift guard (checked by the extension)
-		cache: makeBudgetCache(budgetChars),
+		cache: makeBudgetCache(budgetChars * COST_UNIT_SCALE),
 		counters: makeCounters(),
 		Markdown,
 		getCaps: getCapabilities ?? (() => ({ hyperlinks: false })),
@@ -191,7 +326,7 @@ export function uninstall() {
 	return { restored: false, reason: "ownership-lost" }; // keep state; restart required
 }
 
-/** @returns {{hits: number, misses: number, fallbacks: number, chars: number, size: number}} */
+/** chars is estimated retained cost; public stats shape is unchanged. */
 export function getStats() {
 	const state = globalThis[STATE_KEY];
 	if (!state) return { hits: 0, misses: 0, fallbacks: 0, chars: 0, size: 0 };

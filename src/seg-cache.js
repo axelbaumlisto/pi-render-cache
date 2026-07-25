@@ -2,11 +2,25 @@
  * C: pure patcher for Intl.Segmenter.prototype.segment — memoizes ICU segmentation.
  * Zero pi deps. Shared state lives on globalThis[Symbol.for("render-cache:seg:v1")]
  * so /reload (fresh module scope) adopts, never layers or resets. See PLAN.md I2-I4.
+ *
+ * Budget cost units are conservative retained-cost estimates, not source chars.
+ * The effective default is 16,000,000 units (≈15,625 KiB estimated retention,
+ * not a heap-byte guarantee). Legacy budgetChars inputs are scaled by 8 so the
+ * extension's existing 2,000,000 setting receives that effective default.
  */
 import { makeBudgetCache, makeCounters } from "./stats.js";
 
 const STATE_KEY = Symbol.for("render-cache:seg:v1");
 const MAX_CACHED_STR = 4096; // strings >4KB bypass the cache entirely
+const ESTIMATED_RECORD_OVERHEAD = 48; // record object + array slot, conservative cost units
+const MAX_ENTRY_BUDGET_DIVISOR = 4;
+const LEGACY_BUDGET_CHARS_DEFAULT = 2_000_000;
+const COST_UNIT_SCALE = 8;
+
+// Task 4 calibration: observed retained-cost/source-char ratios were ~22–51×
+// for segmentation entries. An 8× legacy-input scale restores useful capacity
+// without adopting the worst-case ratio as the default hard memory bound;
+// Tasks 6/7 may later pass calibrated values after revisiting this contract.
 const ASCII_PRINTABLE_RE = /^[\x20-\x7E]*$/;
 
 /** Per-char grapheme records for printable ASCII — skips ICU, same shape as native. */
@@ -63,7 +77,14 @@ function makePatchedSegment(state) {
 			// The whole result object is cached: hit path is Map.get + iterate, no allocation.
 			// Same locale+granularity → containing() via the first segmenter is equivalent.
 			result = makeResult(records, this, str, orig);
-			cache.set(key, result, str.length);
+			const retainedCost =
+				key.length +
+				str.length +
+				records.length * ESTIMATED_RECORD_OVERHEAD +
+				records.reduce((sum, record) => sum + record.segment.length, 0);
+			if (retainedCost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) {
+				cache.set(key, result, retainedCost);
+			}
 		} else {
 			counters.hits++;
 		}
@@ -77,7 +98,7 @@ function makePatchedSegment(state) {
  * reason:"ownership-lost"}, no new wrapper.
  * @returns {{installed: boolean, adopted?: boolean, reason?: string}}
  */
-export function install({ budgetChars = 2_000_000 } = {}) {
+export function install({ budgetChars = LEGACY_BUDGET_CHARS_DEFAULT } = {}) {
 	const existing = globalThis[STATE_KEY];
 	if (existing) {
 		const current = Intl.Segmenter.prototype.segment;
@@ -91,7 +112,7 @@ export function install({ budgetChars = 2_000_000 } = {}) {
 	}
 	const state = {
 		orig: Intl.Segmenter.prototype.segment,
-		cache: makeBudgetCache(budgetChars),
+		cache: makeBudgetCache(budgetChars * COST_UNIT_SCALE),
 		counters: makeCounters(),
 		resolved: new WeakMap(),
 		patched: null,
@@ -125,7 +146,7 @@ export function uninstall() {
 	return { restored: false, reason: "ownership-lost" }; // keep state; restart required
 }
 
-/** @returns {{hits: number, misses: number, fallbacks: number, size: number, chars: number, budgetChars: number}} */
+/** chars is estimated retained cost; public stats shape is unchanged. */
 export function getStats() {
 	const state = globalThis[STATE_KEY];
 	if (!state) return { hits: 0, misses: 0, fallbacks: 0, size: 0, chars: 0, budgetChars: 0 };

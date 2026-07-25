@@ -1,6 +1,8 @@
 /**
  * Shared cache plumbing for both patchers (seg-cache, md-cache):
- * one FIFO char-budget cache implementation + one counters shape. (DRY, see PLAN.md)
+ * one FIFO retained-cost-budget cache implementation + one counters shape.
+ * Cost units are conservative caller estimates, not source-character counts;
+ * 1,024 units represent ≈1 KiB of estimated retention, not measured heap bytes.
  */
 
 /** @returns {{hits: number, misses: number, fallbacks: number}} */
@@ -9,12 +11,12 @@ export function makeCounters() {
 }
 
 /**
- * Map-backed cache capped by TOTAL CACHED CHARS. Eviction is honest FIFO:
+ * Map-backed cache capped by total caller-estimated retained cost. Eviction is honest FIFO:
  * when an insert would exceed the budget, the first-inserted keys are dropped
  * until the new entry fits. Entries costing more than the whole budget are
  * silently not cached (caller still gets its value; nothing breaks).
  *
- * @param {number} budgetChars total char budget across all entries
+ * @param {number} budgetChars total conservative retained-cost units across entries
  */
 export function makeBudgetCache(budgetChars = 2_000_000) {
 	const map = new Map(); // key → { value, cost }; Map preserves insertion order → FIFO
@@ -37,7 +39,7 @@ export function makeBudgetCache(budgetChars = 2_000_000) {
 		/**
 		 * @param {string} key
 		 * @param {unknown} value
-		 * @param {number} cost char cost of this entry
+		 * @param {number} cost caller-supplied estimated retained cost of this entry
 		 */
 		set(key, value, cost) {
 			if (cost > budgetChars || map.has(key)) return;

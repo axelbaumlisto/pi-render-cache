@@ -26,5 +26,46 @@
 			"markdownRender": "9ff0fb16",
 			"getMarkdownTheme": "b8b6a5a8"
 		}
+	},
+	"markdownThemeSignature": {
+		"$comment": "Shared by the locked 0.80.7 and 0.82.1 fixtures. versions permits a future per-version override. codeBlockIndent is the optional string added by interactive mode's spread wrapper. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.",
+		"shared": {
+			"functionSourceHashes": {
+				"bold": "43793f0e",
+				"code": "433573d6",
+				"codeBlock": "764046a1",
+				"codeBlockBorder": "544bbfdf",
+				"heading": "2b6ea36b",
+				"highlightCode": "d579802b",
+				"hr": "207f1df5",
+				"italic": "c12ab783",
+				"link": "beebce09",
+				"linkUrl": "ef629a9c",
+				"listBullet": "31da633f",
+				"quote": "3932d489",
+				"quoteBorder": "9afb1bc7",
+				"strikethrough": "e75a5770",
+				"underline": "8d0df633"
+			},
+			"optionalOwnProperties": {
+				"codeBlockIndent": "string"
+			}
+		},
+		"versions": {}
+	},
+	"cacheBudgetCalibration": {
+		"$comment": "budgetChars remains the legacy source-char-era input for extension compatibility. Cache modules translate it to conservative retained-cost units; Tasks 6/7 may replace this bridge with directly calibrated values. Approximate KiB figures describe estimate units, not measured heap bytes.",
+		"md-cache": {
+			"costUnitScale": 4,
+			"effectiveDefaultCostUnits": 8000000,
+			"approxEstimatedKiB": 7813,
+			"observedCostToSourceRatio": "~8-9x"
+		},
+		"seg-cache": {
+			"costUnitScale": 8,
+			"effectiveDefaultCostUnits": 16000000,
+			"approxEstimatedKiB": 15625,
+			"observedCostToSourceRatio": "~22-51x"
+		}
 	}
 }
