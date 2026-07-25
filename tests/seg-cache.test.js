@@ -186,32 +186,22 @@ test("1000 emoji graphemes are charged conservatively and evict within budget", 
 	}
 });
 
-test("perf soft-gate: repeated RU string ≥10× faster than native", () => {
+test("repeated RU workload correctness + cache activity", () => {
 	install();
 	try {
 		const str = "Съешь же ещё этих мягких французских булок, да выпей чаю. ".repeat(4);
 		const seg = new Intl.Segmenter("ru", { granularity: "word" });
-		const natSeg = new Intl.Segmenter("ru", { granularity: "word" });
-		// warm both paths (cache fill + JIT)
-		for (let i = 0; i < 10; i++) {
-			[...seg.segment(str)];
-			[...nativeSegment.call(natSeg, str)];
+		const expected = nat("ru", "word", str);
+		const before = getStats();
+		const repetitions = 1000;
+		let completed = 0;
+		for (let i = 0; i < repetitions; i++) {
+			assert.deepEqual([...seg.segment(str)], expected, `RU repetition ${i} matches native records`);
+			completed++;
 		}
-		const N = 1000;
-		const timeNs = (fn) => {
-			const t0 = process.hrtime.bigint();
-			for (let i = 0; i < N; i++) fn();
-			return Number(process.hrtime.bigint() - t0);
-		};
-		// Soft gate: best-of-5 per side to shave scheduler/GC noise off a ~ms-scale sample.
-		let patchedNs = Infinity;
-		let nativeNs = Infinity;
-		for (let trial = 0; trial < 5; trial++) {
-			patchedNs = Math.min(patchedNs, timeNs(() => [...seg.segment(str)]));
-			nativeNs = Math.min(nativeNs, timeNs(() => [...nativeSegment.call(natSeg, str)]));
-		}
-		const speedup = nativeNs / patchedNs;
-		assert.ok(speedup >= 10, `soft perf gate: expected ≥10× speedup, got ${speedup.toFixed(1)}×`);
+		assert.equal(completed, repetitions, "all repeated segmentation operations completed");
+		assert.equal(getStats().misses, before.misses + 1, "first repeated workload call is a cache miss");
+		assert.equal(getStats().hits, before.hits + repetitions - 1, "remaining workload calls are cache hits");
 	} finally {
 		uninstall();
 	}

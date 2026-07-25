@@ -43,6 +43,7 @@
   },
   "scripts": {
     "test": "node --test tests/",
+    "test:perf": "npm run benchmark -- --blocks 3 --output .bench-results/test-perf.json && node scripts/evaluate-benchmark.mjs --input .bench-results/test-perf.json --min-blocks 3",
     "compat": "node scripts/check-upstream.mjs",
     "compat:matrix": "node scripts/install-fixture.mjs --all --check",
     "benchmark": "node scripts/benchmark.mjs",

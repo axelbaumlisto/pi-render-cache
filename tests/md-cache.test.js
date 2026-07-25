@@ -679,9 +679,9 @@ test("fresh array ownership: mutating a returned array never corrupts the global
 	}
 });
 
-// ─── 7. deterministic-workload perf smoke (not release evidence) ────────────
+// ─── 7. deterministic streaming workload correctness ────────────────────────
 
-test("deterministic-workload smoke: 16KB stream patched ≥2× faster (best-of-3)", () => {
+test("deterministic 16KB streaming workload correctness + cache activity", () => {
 	let doc = "# Performance corpus\n\n";
 	let i = 0;
 	while (doc.length < 16384) {
@@ -692,27 +692,24 @@ test("deterministic-workload smoke: 16KB stream patched ≥2× faster (best-of-3
 			"```js\nconst v" + i + " = " + i + ";\n```\n\n";
 		i++;
 	}
-	const timeStream = (renderFn) => {
-		const t0 = process.hrtime.bigint();
-		for (let pos = 40; pos < doc.length + 40; pos += 40) {
-			renderFn(doc.slice(0, Math.min(pos, doc.length)));
-		}
-		return Number(process.hrtime.bigint() - t0);
-	};
-	// orig baseline FIRST (nothing installed → truly pristine), best-of-3
-	let origNs = Infinity;
-	for (let t = 0; t < 3; t++) origNs = Math.min(origNs, timeStream((text) => renderOrig(text, 80)));
 	install({ Markdown, getCapabilities });
-	let patchedNs = Infinity;
 	try {
-		for (let t = 0; t < 3; t++) {
-			patchedNs = Math.min(patchedNs, timeStream((text) => new Markdown(text, 1, 0, mdTheme).render(80)));
+		let completed = 0;
+		for (let pos = 40; pos < doc.length + 40; pos += 40) {
+			const text = doc.slice(0, Math.min(pos, doc.length));
+			assert.deepEqual(
+				new Markdown(text, 1, 0, mdTheme).render(80),
+				renderOrig(text, 80),
+				`16KB stream step ${completed} (len=${text.length}, w=80)`,
+			);
+			completed++;
 		}
+		assert.equal(completed, Math.ceil(doc.length / 40), "all deterministic stream chunks completed");
+		const stats = getStats();
+		assert.ok(stats.hits + stats.misses > 0, "streaming workload must exercise cache activity");
 	} finally {
 		uninstall();
 	}
-	const speedup = origNs / patchedNs;
-	assert.ok(speedup >= 2, `deterministic-workload smoke: expected ≥2×, got ${speedup.toFixed(2)}× (orig ${(origNs / 1e6).toFixed(0)}ms, patched ${(patchedNs / 1e6).toFixed(0)}ms)`);
 });
 
 // ─── 8. fuzz gate: seeded random docs, patched === orig ─────────────────────
