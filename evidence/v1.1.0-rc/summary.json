@@ -1,0 +1,204 @@
+{
+	"schema": "pi-render-cache/promoted-evidence/v1",
+	"release": "v1.1.0-rc",
+	"promotedAt": "2026-07-25T23:01:59.006Z",
+	"raw": {
+		"fileBasename": "premise-raw.json",
+		"sha256": "233f3b319b655876ffb14063c4f2d5a6e5b6d9b1c5997f28fb4728f75468b8c9"
+	},
+	"corpus": {
+		"file": "fixtures/stream-replay.json",
+		"sha256": "e5c26f722da95d91fc2fcd7a58c9446ff451bd3f05d6680487271ce75b3d7907"
+	},
+	"counts": {
+		"blocksPerWorkload": 20,
+		"totalBlocks": 60,
+		"repsPerRun": 3,
+		"seed": 1
+	},
+	"environment": {
+		"node": "v22.23.0",
+		"icu": "78.2",
+		"platform": "darwin",
+		"arch": "arm64",
+		"osRelease": "25.5.0",
+		"cpuModel": "Apple M3",
+		"nodeOptions": null,
+		"pi": {
+			"version": "0.82.1",
+			"rootBasename": "pi-coding-agent"
+		},
+		"piTui": {
+			"version": "0.82.1",
+			"rootBasename": "pi-tui",
+			"entryBasename": "index.js"
+		},
+		"theme": {
+			"pathBasename": "theme.js"
+		}
+	},
+	"workloads": {
+		"ordinary": {
+			"blocks": 20,
+			"outputSha256": "2cf04b9f319c69a8431b0e045e9b40cb69b0a39b78272cc6dd0b2d10b2d9d7e3",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 1.3795867261361066,
+					"ci95Speedup": [
+						1.2976454246248823,
+						1.5970646098969525
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 16.69687383488668,
+					"ci95Speedup": [
+						14.973928917006265,
+						18.250753711036733
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 21.22340613217233,
+					"ci95Speedup": [
+						20.029288459025146,
+						23.679594050123566
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 10723328,
+					"medianRetainedEndDeltaBytes": 10723328
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 18685952,
+					"medianRetainedEndDeltaBytes": 18685952,
+					"medianPairedReplayPeakDeltaBytes": 327680,
+					"medianPairedRetainedEndDeltaBytes": 262144
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 1646592,
+					"medianRetainedEndDeltaBytes": 1646592,
+					"medianPairedReplayPeakDeltaBytes": -10305536,
+					"medianPairedRetainedEndDeltaBytes": -11476992
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 1982464,
+					"medianRetainedEndDeltaBytes": 1982464,
+					"medianPairedReplayPeakDeltaBytes": -8765440,
+					"medianPairedRetainedEndDeltaBytes": -9199616
+				}
+			}
+		},
+		"thinking": {
+			"blocks": 20,
+			"outputSha256": "209c1d0118ecb10fbd4c545628729b297a44554c7d8dd3db436deedf7b5ca197",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 1.6059581561199665,
+					"ci95Speedup": [
+						1.5155544177552822,
+						1.6901050148299943
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 1.0130959101097503,
+					"ci95Speedup": [
+						0.8720124850968631,
+						1.078177571463753
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 1.635784276989009,
+					"ci95Speedup": [
+						1.571051342434381,
+						1.7025827690841877
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 10076160,
+					"medianRetainedEndDeltaBytes": 10076160
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 10051584,
+					"medianRetainedEndDeltaBytes": 10051584,
+					"medianPairedReplayPeakDeltaBytes": -483328,
+					"medianPairedRetainedEndDeltaBytes": -483328
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 10338304,
+					"medianRetainedEndDeltaBytes": 10338304,
+					"medianPairedReplayPeakDeltaBytes": 327680,
+					"medianPairedRetainedEndDeltaBytes": 327680
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 9379840,
+					"medianRetainedEndDeltaBytes": 9379840,
+					"medianPairedReplayPeakDeltaBytes": -368640,
+					"medianPairedRetainedEndDeltaBytes": -368640
+				}
+			}
+		},
+		"unicode-width": {
+			"blocks": 20,
+			"outputSha256": "01ca66192f5d5f1be42c3830837534ee7238ba951943b86486694ded74b37177",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 2.794924283377618,
+					"ci95Speedup": [
+						2.5002868374702762,
+						3.131168879187552
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 0.9658698080921405,
+					"ci95Speedup": [
+						0.8204543161144102,
+						1.0626313947447097
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 2.9735036904792067,
+					"ci95Speedup": [
+						2.8430723910219893,
+						3.107920198719987
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 1081344,
+					"medianRetainedEndDeltaBytes": 1064960
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 3817472,
+					"medianRetainedEndDeltaBytes": 3768320,
+					"medianPairedReplayPeakDeltaBytes": 2752512,
+					"medianPairedRetainedEndDeltaBytes": 2801664
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 1179648,
+					"medianRetainedEndDeltaBytes": 1179648,
+					"medianPairedReplayPeakDeltaBytes": -106496,
+					"medianPairedRetainedEndDeltaBytes": -106496
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 4603904,
+					"medianRetainedEndDeltaBytes": 4603904,
+					"medianPairedReplayPeakDeltaBytes": 3620864,
+					"medianPairedRetainedEndDeltaBytes": 3932160
+				}
+			}
+		}
+	}
+}

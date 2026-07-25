@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      compatibility_matrix:
+        description: Run the locked 0.80.7 and 0.82.1 compatibility fixtures
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      PI_PACKAGE_ROOT: ${{ github.workspace }}/node_modules/@earendil-works/pi-coding-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run compat
+      - run: npm run check-pack
+      - name: Locked compatibility matrix (on demand)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compatibility_matrix }}
+        run: npm run compat:matrix
+
+  quick-bench:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      PI_PACKAGE_ROOT: ${{ github.workspace }}/node_modules/@earendil-works/pi-coding-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Informational three-block feasibility replay
+        run: npm run release:feasibility -- --quick --output .bench-results/feasibility-quick.json
+      - name: Preserve informational raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quick-bench-${{ github.sha }}
+          path: .bench-results/
+          if-no-files-found: ignore
