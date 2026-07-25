@@ -43,6 +43,8 @@
   },
   "scripts": {
     "test": "node --test tests/",
+    "compat": "node scripts/check-upstream.mjs",
+    "compat:matrix": "node scripts/install-fixture.mjs --all --check",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm pack --dry-run",
     "prepublishOnly": "npm run check"

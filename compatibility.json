@@ -1,0 +1,30 @@
+{
+	"$comment": "Exact tested pi/pi-tui compatibility units (one unit = a pi install plus its nested pi-tui). implementationHashes are djb2 hex hashes of Markdown.prototype.render.toString() and getMarkdownTheme.toString() for the locked version; populate/refresh per version with: PI_PACKAGE_ROOT=<fixture-root> node scripts/check-upstream.mjs --update-allowlist. Hash checks are diagnostic compatibility gates, not security authentication.",
+	"node": ">=22.19.0",
+	"versions": {
+		"0.80.7": {
+			"piTui": "0.80.7",
+			"patches": {
+				"md-cache": "expected-active",
+				"seg-cache": "expected-active"
+			}
+		},
+		"0.82.1": {
+			"piTui": "0.82.1",
+			"patches": {
+				"md-cache": "expected-active",
+				"seg-cache": "expected-active"
+			}
+		}
+	},
+	"implementationHashes": {
+		"0.82.1": {
+			"markdownRender": "9ff0fb16",
+			"getMarkdownTheme": "b8b6a5a8"
+		},
+		"0.80.7": {
+			"markdownRender": "9ff0fb16",
+			"getMarkdownTheme": "b8b6a5a8"
+		}
+	}
+}

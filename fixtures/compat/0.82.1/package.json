@@ -1,0 +1,9 @@
+{
+	"name": "pi-render-cache-fixture-0.82.1",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Isolated compatibility fixture: exact pi 0.82.1 with its locked transitive pi-tui",
+	"dependencies": {
+		"@earendil-works/pi-coding-agent": "0.82.1"
+	}
+}

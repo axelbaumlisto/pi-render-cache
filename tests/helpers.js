@@ -3,13 +3,16 @@
  * pi-tui is NEVER a dependency of this plugin (same-registry guarantee, see PLAN.md).
  */
 
-const PI_ROOT = "/Users/shamash/local/lib/node_modules/@earendil-works/pi-coding-agent";
-const PI_TUI_PATH = `${PI_ROOT}/node_modules/@earendil-works/pi-tui/dist/index.js`;
-const THEME_PATH = `${PI_ROOT}/dist/modes/interactive/theme/theme.js`;
+import { pathToFileURL } from "node:url";
+import { resolvePiRoot, resolvePiTui, resolveThemeModule } from "../scripts/resolve-pi.mjs";
+
+const PI_ROOT = resolvePiRoot().root;
+const PI_TUI_PATH = resolvePiTui(PI_ROOT).entry;
+const THEME_PATH = resolveThemeModule(PI_ROOT).path;
 
 /** @returns {Promise<object>} pi-tui module namespace (Markdown, getCapabilities, ...) */
 export async function loadPiTui() {
-	return import(PI_TUI_PATH);
+	return import(pathToFileURL(PI_TUI_PATH).href);
 }
 
 /**
@@ -19,7 +22,7 @@ export async function loadPiTui() {
  * @returns {Promise<{getMarkdownTheme: () => object, setGlobalTheme: (t: object) => void, theme: object, initTheme: Function, setThemeInstance: Function}>}
  */
 export async function loadTheme() {
-	const mod = await import(THEME_PATH);
+	const mod = await import(pathToFileURL(THEME_PATH).href);
 	// theme is a proxy over globalThis; getMarkdownTheme() throws until initialized.
 	const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
 	const THEME_KEY_OLD = Symbol.for("@mariozechner/pi-coding-agent:theme");
