@@ -1,81 +1,95 @@
 /**
- * render-cache — pi extension (PLAN.md Шаг 4).
+ * render-cache — pi extension (thin wiring layer, plan Task 2).
  *
  * Patches Markdown.prototype.render (incremental streaming render, src/md-cache.js)
  * and Intl.Segmenter.prototype.segment (ICU memoization, src/seg-cache.js).
  *
- * - pi-tui via BARE specifier only: jiti aliases it to pi's own copy → same
- *   prototype pi renders with (ROUND2_review_2.md §1). NEVER a plugin dep.
- * - Version drift: md-cache stores hash(orig render.toString()) at first install.
- *   If shared state exists but prototype.render is neither ours nor the stored
- *   original → a foreign wrapper/new pi landed mid-process → skip install.
- * - Self-check is EVENT-GATED (§4): armed on the FIRST message_update (a quiet
- *   session legitimately renders zero Markdown — never disable before that);
- *   2s later, zero md-cache activity → uninstall both + notify.
+ * All decision/transition logic lives in src/patch-state.js so tests can drive
+ * the real code without a pi host. Per-patch lifecycle:
+ *   - md-cache installs ONLY when djb2(Markdown.prototype.render.toString())
+ *     matches an allowlisted hash in compatibility.json (shipped with the
+ *     package); unknown implementation → "unsupported", never patched.
+ *   - seg-cache is evaluated INDEPENDENTLY (descriptor writable+configurable
+ *     plus a native-behavior canary); one patch's failure never affects the other.
+ *   - Shared state on globalThis symbols lets /reload adopt; a foreign function
+ *     where ours/original should be → "ownership-lost", never layer, never
+ *     restore, restart required.
+ * Counters are observability only — there is NO zero-activity self-disable.
+ *
+ * pi-tui via BARE specifier only: jiti aliases it to pi's own copy → same
+ * prototype pi renders with. NEVER a plugin dep.
  */
+import fs from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, Markdown } from "@earendil-works/pi-tui";
+import { getStats as mdStats } from "../src/md-cache.js";
 import {
-	getStats as mdStats,
-	install as installMd,
-	uninstall as uninstallMd,
-} from "../src/md-cache.js";
-import {
-	getStats as segStats,
-	install as installSeg,
-	uninstall as uninstallSeg,
-} from "../src/seg-cache.js";
+	mdOwnership,
+	segOwnership,
+	setupMd,
+	setupSeg,
+	summary,
+} from "../src/patch-state.js";
+import { getStats as segStats } from "../src/seg-cache.js";
 
-const MD_STATE_KEY = Symbol.for("render-cache:md:v1");
-const SELF_CHECK_MS = 2000;
-
-/** djb2 → hex; must mirror md-cache.js hashString (drift check compares against its origHash). */
-function hashString(str: string): string {
-	let h = 5381;
-	for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-	return h.toString(16);
+/** Allowlisted Markdown.render hashes from compatibility.json (package root). */
+function loadAllowlistHashes(): string[] {
+	try {
+		const url = new URL("../compatibility.json", import.meta.url);
+		const compat = JSON.parse(fs.readFileSync(url, "utf8"));
+		const hashes = new Set<string>();
+		for (const entry of Object.values(compat.implementationHashes ?? {})) {
+			const h = (entry as Record<string, string>).markdownRender;
+			if (typeof h === "string" && h.length > 0) hashes.add(h);
+		}
+		return [...hashes];
+	} catch {
+		return []; // unreadable/missing → no known implementation → md unsupported
+	}
 }
 
 export default function (pi: ExtensionAPI) {
-	// Version-drift guard BEFORE install: existing state whose patch is no longer
-	// on the prototype AND the current render doesn't hash to the stored original
-	// → someone replaced render mid-process; stitching against it would be unsound.
-	const state = (globalThis as Record<symbol, any>)[MD_STATE_KEY];
-	const current = Markdown.prototype.render;
-	if (state && current !== state.patched && hashString(current.toString()) !== state.origHash) {
+	// Evaluate each patch INDEPENDENTLY; failures never cross over.
+	const md = setupMd({
+		Markdown,
+		getCapabilities,
+		allowlistHashes: loadAllowlistHashes(),
+		budgetChars: 2_000_000,
+	});
+	const seg = setupSeg({ budgetChars: 2_000_000 });
+
+	// Notify only when something is NOT active, with per-patch reason.
+	if (md.state !== "active" || seg.state !== "active") {
 		pi.on("session_start", (_event, ctx) => {
-			ctx.ui.notify("render-cache: Markdown.render version drift detected, not installing", "warning");
+			const parts: string[] = [];
+			if (md.state !== "active") parts.push(`md-cache ${md.state}: ${md.reason ?? "n/a"}`);
+			if (seg.state !== "active") parts.push(`seg-cache ${seg.state}: ${seg.reason ?? "n/a"}`);
+			ctx.ui.notify(`render-cache: ${parts.join(" | ")}`, "warning");
 		});
-		return;
 	}
 
-	installSeg();
-	installMd({ Markdown, getCapabilities, budgetChars: 2_000_000 });
-
-	// Self-check: armed once, on the first message_update only.
-	let armed = false;
-	pi.on("message_update", (_event, ctx) => {
-		if (armed) return;
-		armed = true;
-		const timer = setTimeout(() => {
-			const s = mdStats();
-			if (s.hits + s.misses + s.fallbacks === 0) {
-				uninstallMd();
-				uninstallSeg();
-				ctx.ui.notify("render-cache: patch inactive, self-disabled", "warning");
-			}
-		}, SELF_CHECK_MS);
-		timer.unref?.();
-	});
-
 	pi.registerCommand("rcstats", {
-		description: "render-cache hit/miss/fallback stats",
+		description: "render-cache per-patch state, ownership, versions, counters, memory",
 		handler: async (_args, ctx) => {
+			const s = summary();
 			const m = mdStats();
 			const g = segStats();
+			const fmt = (p: { state: string; reason: string | null }) =>
+				p.state + (p.reason ? ` (${p.reason})` : "");
+			let versions = "pi ?/pi-tui ?";
+			try {
+				// Light ESM import of the shared resolver (shipped in scripts/).
+				const rp = await import("../scripts/resolve-pi.mjs");
+				const piInfo = rp.resolvePiRoot();
+				const tuiInfo = rp.resolvePiTui(piInfo.root);
+				versions = `pi ${piInfo.version}/pi-tui ${tuiInfo.version}`;
+			} catch {
+				// resolver unavailable (unusual install layout) → versions stay unknown
+			}
 			ctx.ui.notify(
-				`md h${m.hits}/m${m.misses}/f${m.fallbacks} size ${m.size} chars ${m.chars} | ` +
-					`seg h${g.hits}/m${g.misses}/f${g.fallbacks}`,
+				`md ${fmt(s.md)} own=${mdOwnership(Markdown)} h${m.hits}/m${m.misses}/f${m.fallbacks} size ${m.size} chars ${m.chars} | ` +
+					`seg ${fmt(s.seg)} own=${segOwnership()} h${g.hits}/m${g.misses}/f${g.fallbacks} size ${g.size} chars ${g.chars} | ` +
+					versions,
 				"info",
 			);
 		},

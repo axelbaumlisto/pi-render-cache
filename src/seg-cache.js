@@ -71,10 +71,24 @@ function makePatchedSegment(state) {
 	};
 }
 
-/** Idempotent: adopts existing shared state on reinstall (reload-safe). */
+/**
+ * Idempotent: adopts existing shared state on reinstall (reload-safe).
+ * REFUSES TO LAYER: shared state + foreign prototype fn → {installed:false,
+ * reason:"ownership-lost"}, no new wrapper.
+ * @returns {{installed: boolean, adopted?: boolean, reason?: string}}
+ */
 export function install({ budgetChars = 2_000_000 } = {}) {
 	const existing = globalThis[STATE_KEY];
-	if (existing) return; // adopt: state (counters, cache, patch) already live
+	if (existing) {
+		const current = Intl.Segmenter.prototype.segment;
+		if (current === existing.patched) return { installed: true, adopted: true };
+		if (current === existing.orig) {
+			// Pristine prototype with surviving state: re-applying OUR patch is safe.
+			Intl.Segmenter.prototype.segment = existing.patched;
+			return { installed: true, adopted: true };
+		}
+		return { installed: false, reason: "ownership-lost" }; // never layer over a foreign fn
+	}
 	const state = {
 		orig: Intl.Segmenter.prototype.segment,
 		cache: makeBudgetCache(budgetChars),
@@ -85,16 +99,30 @@ export function install({ budgetChars = 2_000_000 } = {}) {
 	state.patched = makePatchedSegment(state);
 	globalThis[STATE_KEY] = state;
 	Intl.Segmenter.prototype.segment = state.patched;
+	return { installed: true };
 }
 
-/** Restores the original ONLY if prototype.segment is still ours (monkey-patch etiquette). */
+/**
+ * Restores the original ONLY if prototype.segment is still ours (or already
+ * the original). On ownership loss the shared state is PRESERVED — a foreign
+ * wrapper may still call our patch, and dropping bookkeeping would let a later
+ * install layer a second wrapper.
+ * @returns {{restored: boolean, reason?: string}}
+ */
 export function uninstall() {
 	const state = globalThis[STATE_KEY];
-	if (!state) return;
-	if (Intl.Segmenter.prototype.segment === state.patched) {
+	if (!state) return { restored: true }; // nothing installed → already pristine
+	const current = Intl.Segmenter.prototype.segment;
+	if (current === state.patched) {
 		Intl.Segmenter.prototype.segment = state.orig;
+		delete globalThis[STATE_KEY];
+		return { restored: true };
 	}
-	delete globalThis[STATE_KEY];
+	if (current === state.orig) {
+		delete globalThis[STATE_KEY]; // prototype already pristine
+		return { restored: true };
+	}
+	return { restored: false, reason: "ownership-lost" }; // keep state; restart required
 }
 
 /** @returns {{hits: number, misses: number, fallbacks: number, size: number, chars: number, budgetChars: number}} */
