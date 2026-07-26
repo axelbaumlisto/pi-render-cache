@@ -34,6 +34,16 @@ The durable sanitized result, environment, hashes, and exact unrounded values ar
 
 On pi 0.82.1 both patches are **active** after their independent canaries. `md-cache` deliberately falls back for styled thinking because it has a non-null text style; that path is enforced by tests and is not claimed as cacheable. `seg-cache` remains active there and produced about 1.6× in the controlled replay.
 
+## Live pi 0.82.1 smoke check
+
+After the automated gates, the packaged extension was loaded by the real pi host with `pi -e ./extensions/index.ts --no-session -p ...`. An in-process probe verified the actual host prototypes and lifecycle state:
+
+```text
+LIVE_CHECK {"mdState":"active","segState":"active","mdPatched":true,"segPatched":true}
+```
+
+The request completed and rendered normally. This is an ecological load/wiring check; controlled performance claims still come only from the blocked replay above.
+
 ## Independent retirement protocol
 
 Each patch is retired independently and only after correctness parity; see the [full plan](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.0/.pi/plans/validate-and-extend-render-cache.md#retirement-protocol-future-released-upstream).

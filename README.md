@@ -62,7 +62,7 @@ Live `/rcstats` observations included seg-cache hit rates of 94–99.6% and md-c
 
 ### Correctness
 
-The current deterministic suite contains **83 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
+The current deterministic suite contains **84 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, configuration drift, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
 
 ## Install
 
@@ -119,7 +119,7 @@ npm run compat
 The benchmark engine and test fixtures are repository tooling, not included in the npm tarball. From a source checkout:
 
 ```bash
-npm run verify          # 83 tests, typecheck, selected-unit compat, exact pack manifest
+npm run verify          # 84 tests, typecheck, selected-unit compat, exact pack manifest
 npm run compat:matrix   # locked pi 0.80.7 and 0.82.1 fixtures
 npm run premise         # full 20-block controlled replay and evaluator
 npm run test:perf       # short 3-block maintainer check; not release evidence
