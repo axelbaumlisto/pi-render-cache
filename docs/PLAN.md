@@ -74,7 +74,7 @@ plugins/render-cache/
 
 ### Шаг 0. Каркас + smoke (30 мин)
 - test: `node --test` запускается, pi-tui импортируется из
-  `/Users/shamash/local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui`,
+  `<pi installation root>/node_modules/@earendil-works/pi-tui`,
   `new Markdown("x",0,0,theme).render(80)` отдаёт строки. КРАСНЫЙ: нет файлов.
 - code: пустые модули, тест-хелпер `loadPiTui()`.
 

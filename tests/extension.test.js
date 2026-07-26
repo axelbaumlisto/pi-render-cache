@@ -7,6 +7,7 @@
  * restore-only-if-ours with state PRESERVED on ownership loss, and
  * never-layer-over-a-foreign-wrapper on reinstall/reload.
  */
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadPiTui, loadTheme } from "./helpers.js";
@@ -26,6 +27,16 @@ const LIFECYCLE_KEY = Symbol.for("render-cache:lifecycle:v1");
 const NATIVE_SEGMENT = Intl.Segmenter.prototype.segment;
 const ORIG_RENDER = Markdown.prototype.render;
 const RENDER_ALLOWLIST = [mdMod.hashString(ORIG_RENDER.toString())];
+
+test("compatibility.json theme signature stays in sync with CORE_THEME_SOURCE_HASHES", () => {
+	const compatibility = JSON.parse(
+		readFileSync(new URL("../compatibility.json", import.meta.url), "utf8"),
+	);
+	assert.deepEqual(
+		compatibility.markdownThemeSignature.shared.functionSourceHashes,
+		mdMod.CORE_THEME_SOURCE_HASHES,
+	);
+});
 
 /** Hard reset of all shared globals + prototypes between lifecycle tests. */
 function fullReset() {

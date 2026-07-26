@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { hashString } from "../src/md-cache.js";
 import { resolvePiRoot, resolvePiTui, resolveThemeModule } from "./resolve-pi.mjs";
 
 const PROJECT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -35,13 +36,6 @@ const UPDATE_ALLOWLIST = args.includes("--update-allowlist");
 function say(line) {
 	if (JSON_MODE) process.stderr.write(line + "\n");
 	else process.stdout.write(line + "\n");
-}
-
-/** djb2 → hex; same algorithm as src/md-cache.js version-drift guard. */
-function djb2(str) {
-	let h = 5381;
-	for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-	return h.toString(16);
 }
 
 const report = {
@@ -107,9 +101,9 @@ try {
 
 	// --- Source hashes ---
 	const renderSrc = Markdown?.prototype?.render?.toString() ?? "";
-	report.hashes.markdownRender = { djb2: djb2(renderSrc) };
+	report.hashes.markdownRender = { djb2: hashString(renderSrc) };
 	if (typeof themeMod.getMarkdownTheme === "function") {
-		report.hashes.getMarkdownTheme = { djb2: djb2(themeMod.getMarkdownTheme.toString()) };
+		report.hashes.getMarkdownTheme = { djb2: hashString(themeMod.getMarkdownTheme.toString()) };
 	}
 	say(`hash      Markdown.prototype.render djb2=${report.hashes.markdownRender.djb2}`);
 	if (report.hashes.getMarkdownTheme) {

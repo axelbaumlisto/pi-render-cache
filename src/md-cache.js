@@ -45,7 +45,7 @@ const THEME_SIGNATURE_CACHE = new WeakMap();
 
 // Locked getMarkdownTheme() callback sources for pi 0.80.7 and 0.82.1.
 // Keep this table synchronized with compatibility.json.markdownThemeSignature.
-const CORE_THEME_SOURCE_HASHES = Object.freeze({
+export const CORE_THEME_SOURCE_HASHES = Object.freeze({
 	bold: "43793f0e",
 	code: "433573d6",
 	codeBlock: "764046a1",
@@ -290,7 +290,7 @@ export function install({ Markdown, getCapabilities, budgetChars = LEGACY_BUDGET
 	const orig = Markdown.prototype.render;
 	const state = {
 		orig,
-		origHash: hashString(orig.toString()), // version-drift guard (checked by the extension)
+		origHash: hashString(orig.toString()), // recorded at install for tests/diagnostics; the runtime gate is evaluateMdSupport() in patch-state.js
 		cache: makeBudgetCache(budgetChars * COST_UNIT_SCALE),
 		counters: makeCounters(),
 		Markdown,

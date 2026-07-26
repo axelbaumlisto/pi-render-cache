@@ -38,8 +38,7 @@
     "node": ">=22.19.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.82.1",
@@ -58,6 +57,7 @@
     "verify": "npm test && npm run typecheck && npm run compat && npm run check-pack",
     "check-pack": "node scripts/check-pack.mjs",
     "release:feasibility": "node scripts/release-feasibility.mjs",
+    "release:verify": "npm run verify && npm run premise && npm run release:feasibility -- --input .bench-results/premise-raw.json --output .bench-results/release-verify.json",
     "check": "npm run verify",
     "prepublishOnly": "npm run verify"
   }
