@@ -39,7 +39,7 @@
 		}
 	},
 	"markdownThemeSignature": {
-		"$comment": "Shared by the locked 0.80.7 and 0.82.1 fixtures. versions permits a future per-version override. codeBlockIndent is the optional string added by interactive mode's spread wrapper. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.",
+		"$comment": "Shared by the locked 0.80.7, 0.82.1, and 0.84.1 fixtures. versions permits a future per-version override. codeBlockIndent is the optional string added by interactive mode's spread wrapper. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.",
 		"shared": {
 			"functionSourceHashes": {
 				"bold": "43793f0e",

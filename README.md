@@ -36,17 +36,17 @@ The patches are installed and evaluated independently. Runtime states are `activ
 
 ## Measurements
 
-### Controlled replay: pi 0.82.1
+### Controlled replay: pi 0.84.1
 
-The v1.1.0 release replay used Apple M3, Node 22.23.0, pi/pi-tui 0.82.1, and 20 randomized complete blocks per workload. Values are median baseline/mode speedups with paired 95% whole-block bootstrap CIs.
+The v1.1.1 release replay used Apple M3, Node 22.23.0, pi/pi-tui 0.84.1, and 20 randomized complete blocks per workload. Values are median baseline/mode speedups with paired 95% whole-block bootstrap CIs.
 
 | Workload | seg-cache | md-cache | both |
 |---|---:|---:|---:|
-| Ordinary streaming Markdown | 1.38× [1.30, 1.60] | 16.70× [14.97, 18.25] | **21.22× [20.03, 23.68]** |
-| Styled thinking | 1.61× [1.52, 1.69] | 1.01× [0.87, 1.08] (fallback by design) | **1.64× [1.57, 1.70]** |
-| Unicode visible-width work | 2.79× [2.50, 3.13] | n/a | **2.97× [2.84, 3.11]** |
+| Ordinary streaming Markdown | 1.51× [1.38, 1.59] | 14.88× [13.03, 16.34] | **16.42× [14.85, 18.42]** |
+| Styled thinking | 1.50× [1.37, 1.58] | 0.94× [0.88, 1.00] (fallback by design) | **1.50× [1.39, 1.64]** |
+| Unicode visible-width work | 2.34× [2.24, 2.58] | n/a | **2.40× [2.35, 2.52]** |
 
-Every replay cut point was byte-identical. The sanitized evidence, memory deltas, environment, and hashes are in [`evidence/v1.1.0/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.0/evidence/v1.1.0/summary.json); methodology and upstream state are in [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md). From a source checkout, reproduce the release workload with `npm run premise`.
+Every replay cut point was byte-identical. The sanitized evidence, memory deltas, environment, and hashes are in [`evidence/v1.1.1/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.1/evidence/v1.1.1/summary.json); methodology and upstream state are in [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md). From a source checkout, reproduce the release workload with `npm run premise`.
 
 ### Live-session observations: pi 0.80.7, 2026-07
 
@@ -62,7 +62,7 @@ Live `/rcstats` observations included seg-cache hit rates of 94–99.6% and md-c
 
 ### Correctness
 
-The current deterministic suite contains **84 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, configuration drift, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
+The current deterministic suite contains **85 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, configuration drift, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
 
 ## Install
 
@@ -120,7 +120,7 @@ npm run compat
 The benchmark engine and test fixtures are repository tooling, not included in the npm tarball. From a source checkout:
 
 ```bash
-npm run verify          # 84 tests, typecheck, selected-unit compat, exact pack manifest
+npm run verify          # 85 tests, typecheck, selected-unit compat, exact pack manifest
 npm run compat:matrix   # locked pi 0.80.7, 0.82.1, and 0.84.1 fixtures
 npm run premise         # full 20-block controlled replay and evaluator
 npm run test:perf       # short 3-block maintainer check; not release evidence
@@ -128,7 +128,7 @@ npm run test:perf       # short 3-block maintainer check; not release evidence
 
 ## Upstream context
 
-As checked on 2026-08-07, released pi 0.84.1 (`53fa77ccd8a279eb87e92294ef3687b03ff80112`) and newer upstream `main` (`958c13f25080b59d4b736193f972a8502a7a2f8b`) still contain both hot paths. The intervening commits do not touch the streaming assistant, Markdown renderer, or Segmenter call sites.
+As checked on 2026-08-07, released pi 0.84.1 (`53fa77ccd8a279eb87e92294ef3687b03ff80112`) and newer upstream `main` (`4bf1bba203c699a0b79da669b084052c72b7a35a`) still contain both hot paths. The intervening commits do not touch the streaming assistant, Markdown renderer, or Segmenter call sites.
 
 - [#6665](https://github.com/earendil-works/pi/issues/6665) is open, assigned, and in progress.
 - [#7017](https://github.com/earendil-works/pi/pull/7017) and [#7082](https://github.com/earendil-works/pi/pull/7082) were closed without merge and address complementary outer rendering layers; neither removes both inner cache targets.
@@ -139,7 +139,7 @@ See [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md) for exact source links,
 
 ## Limitations
 
-- **Styled thinking is deliberately not md-cached.** Its non-null text style forces the original Markdown renderer; this unchanged behavior is now enforced and tested. seg-cache remains active and measured about 1.6× in controlled thinking replay.
+- **Styled thinking is deliberately not md-cached.** Its non-null text style forces the original Markdown renderer; this unchanged behavior is now enforced and tested. seg-cache remains active and measured about 1.5× in controlled thinking replay.
 - md-cache mainly helps models that stream many small chunks. Large, infrequent chunks receive proportionally more benefit from seg-cache.
 - Matching core-signature theme callbacks are supported only when deterministic, side-effect-free, and input-transparent. Deliberately spoofed or stateful callbacks are unsupported.
 - Retained-cost figures are conservative estimates, not measured heap-byte guarantees. For backward compatibility, the legacy 2,000,000-unit setting is scaled to effective budgets of 8,000,000 units for md-cache and 16,000,000 for seg-cache; per-entry limits remain one quarter of each total.

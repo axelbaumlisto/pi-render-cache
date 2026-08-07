@@ -65,6 +65,24 @@ export function resetLifecycle() {
 // ---------------------------------------------------------------------------
 
 /**
+ * Select the Markdown implementation hash only for an exact tested pi/pi-tui
+ * compatibility unit. A hash reused by an unlisted or mismatched future unit
+ * is not sufficient by itself.
+ * @param {object} compatibility parsed compatibility.json
+ * @param {string} piVersion selected pi version
+ * @param {string} piTuiVersion pi-tui resolved from that selected pi
+ * @returns {string[]} zero or one allowlisted hash
+ */
+export function selectMarkdownAllowlistHashes(compatibility, piVersion, piTuiVersion) {
+	const unit = compatibility?.versions?.[piVersion];
+	const hash = compatibility?.implementationHashes?.[piVersion]?.markdownRender;
+	if (!unit || unit.piTui !== piTuiVersion || typeof hash !== "string" || hash.length === 0) {
+		return [];
+	}
+	return [hash];
+}
+
+/**
  * Decide whether md-cache may install against this Markdown class.
  * @param {Function} Markdown pi-tui Markdown class
  * @param {string[]} allowlistHashes djb2 hex hashes of known-good

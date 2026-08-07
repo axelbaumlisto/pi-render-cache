@@ -27,15 +27,33 @@ const LIFECYCLE_KEY = Symbol.for("render-cache:lifecycle:v1");
 const NATIVE_SEGMENT = Intl.Segmenter.prototype.segment;
 const ORIG_RENDER = Markdown.prototype.render;
 const RENDER_ALLOWLIST = [mdMod.hashString(ORIG_RENDER.toString())];
+const COMPATIBILITY = JSON.parse(
+	readFileSync(new URL("../compatibility.json", import.meta.url), "utf8"),
+);
 
 test("compatibility.json theme signature stays in sync with CORE_THEME_SOURCE_HASHES", () => {
-	const compatibility = JSON.parse(
-		readFileSync(new URL("../compatibility.json", import.meta.url), "utf8"),
-	);
 	assert.deepEqual(
-		compatibility.markdownThemeSignature.shared.functionSourceHashes,
+		COMPATIBILITY.markdownThemeSignature.shared.functionSourceHashes,
 		mdMod.CORE_THEME_SOURCE_HASHES,
 	);
+});
+
+test("Markdown allowlist selection requires an exact tested pi/pi-tui unit", () => {
+	assert.deepEqual(
+		ps.selectMarkdownAllowlistHashes(COMPATIBILITY, "0.84.1", "0.84.1"),
+		["cea3fb87"],
+	);
+	assert.deepEqual(
+		ps.selectMarkdownAllowlistHashes(COMPATIBILITY, "0.84.1", "0.82.1"),
+		[],
+		"a mismatched pi-tui must fail closed",
+	);
+	assert.deepEqual(
+		ps.selectMarkdownAllowlistHashes(COMPATIBILITY, "future-reusing-hash", "0.84.1"),
+		[],
+		"an unlisted pi must not activate merely because an old implementation hash is reusable",
+	);
+	assert.deepEqual(ps.selectMarkdownAllowlistHashes({}, "0.84.1", "0.84.1"), []);
 });
 
 /** Hard reset of all shared globals + prototypes between lifecycle tests. */

@@ -6,9 +6,9 @@
  *
  * All decision/transition logic lives in src/patch-state.js so tests can drive
  * the real code without a pi host. Per-patch lifecycle:
- *   - md-cache installs ONLY when djb2(Markdown.prototype.render.toString())
- *     matches an allowlisted hash in compatibility.json (shipped with the
- *     package); unknown implementation → "unsupported", never patched.
+ *   - md-cache installs ONLY when the selected exact pi/pi-tui unit is listed
+ *     and djb2(Markdown.prototype.render.toString()) matches that unit's hash
+ *     in compatibility.json; unknown/mismatched unit → "unsupported", never patched.
  *   - seg-cache is evaluated INDEPENDENTLY (descriptor writable+configurable
  *     plus a native-behavior canary); one patch's failure never affects the other.
  *   - Shared state on globalThis symbols lets /reload adopt; a foreign function
@@ -26,25 +26,24 @@ import { getStats as mdStats } from "../src/md-cache.js";
 import {
 	mdOwnership,
 	segOwnership,
+	selectMarkdownAllowlistHashes,
 	setupMd,
 	setupSeg,
 	summary,
 } from "../src/patch-state.js";
 import { getStats as segStats } from "../src/seg-cache.js";
+import { resolvePiRoot, resolvePiTui } from "../scripts/resolve-pi.mjs";
 
-/** Allowlisted Markdown.render hashes from compatibility.json (package root). */
+/** Allowlisted Markdown.render hash for the exact selected pi/pi-tui unit. */
 function loadAllowlistHashes(): string[] {
 	try {
 		const url = new URL("../compatibility.json", import.meta.url);
 		const compat = JSON.parse(fs.readFileSync(url, "utf8"));
-		const hashes = new Set<string>();
-		for (const entry of Object.values(compat.implementationHashes ?? {})) {
-			const h = (entry as Record<string, string>).markdownRender;
-			if (typeof h === "string" && h.length > 0) hashes.add(h);
-		}
-		return [...hashes];
+		const piInfo = resolvePiRoot();
+		const piTuiInfo = resolvePiTui(piInfo.root);
+		return selectMarkdownAllowlistHashes(compat, piInfo.version, piTuiInfo.version);
 	} catch {
-		return []; // unreadable/missing → no known implementation → md unsupported
+		return []; // unreadable/missing/unresolved unit → md unsupported
 	}
 }
 

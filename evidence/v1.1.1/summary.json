@@ -1,0 +1,204 @@
+{
+	"schema": "pi-render-cache/promoted-evidence/v1",
+	"release": "v1.1.1",
+	"promotedAt": "2026-08-07T10:34:26.297Z",
+	"raw": {
+		"fileBasename": "premise-raw.json",
+		"sha256": "cbe5e8ab5f4cd8d64b54230f5870f60eb0e6fe0cd911a03633d509d123ca94f3"
+	},
+	"corpus": {
+		"file": "fixtures/stream-replay.json",
+		"sha256": "e5c26f722da95d91fc2fcd7a58c9446ff451bd3f05d6680487271ce75b3d7907"
+	},
+	"counts": {
+		"blocksPerWorkload": 20,
+		"totalBlocks": 60,
+		"repsPerRun": 3,
+		"seed": 1
+	},
+	"environment": {
+		"node": "v22.23.0",
+		"icu": "78.2",
+		"platform": "darwin",
+		"arch": "arm64",
+		"osRelease": "25.5.0",
+		"cpuModel": "Apple M3",
+		"nodeOptions": null,
+		"pi": {
+			"version": "0.84.1",
+			"rootBasename": "pi-coding-agent"
+		},
+		"piTui": {
+			"version": "0.84.1",
+			"rootBasename": "pi-tui",
+			"entryBasename": "index.js"
+		},
+		"theme": {
+			"pathBasename": "theme.js"
+		}
+	},
+	"workloads": {
+		"ordinary": {
+			"blocks": 20,
+			"outputSha256": "b9d35330213538a36f5a6f3d1946ad07e239f60b97b53f9099cfe2a451739d0e",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 1.5133734941443695,
+					"ci95Speedup": [
+						1.3750868429974348,
+						1.585942542279164
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 14.88350815234244,
+					"ci95Speedup": [
+						13.032807615800891,
+						16.340200986704215
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 16.41681245926979,
+					"ci95Speedup": [
+						14.848996248485888,
+						18.422001643207608
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 21389312,
+					"medianRetainedEndDeltaBytes": 21389312
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 21536768,
+					"medianRetainedEndDeltaBytes": 21536768,
+					"medianPairedReplayPeakDeltaBytes": 557056,
+					"medianPairedRetainedEndDeltaBytes": 557056
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 3235840,
+					"medianRetainedEndDeltaBytes": 3235840,
+					"medianPairedReplayPeakDeltaBytes": -18153472,
+					"medianPairedRetainedEndDeltaBytes": -18153472
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 3751936,
+					"medianRetainedEndDeltaBytes": 3751936,
+					"medianPairedReplayPeakDeltaBytes": -17694720,
+					"medianPairedRetainedEndDeltaBytes": -17694720
+				}
+			}
+		},
+		"thinking": {
+			"blocks": 20,
+			"outputSha256": "5643913721637052b25293d507823167d81918fe45ad6e9f5847189d3c2342ea",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 1.4959725614214052,
+					"ci95Speedup": [
+						1.3729741792862422,
+						1.576281979033805
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 0.9364416070059225,
+					"ci95Speedup": [
+						0.876436074740682,
+						0.9963841350611357
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 1.5017555378673368,
+					"ci95Speedup": [
+						1.3858193077351084,
+						1.6411627540151184
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 10182656,
+					"medianRetainedEndDeltaBytes": 10182656
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 9846784,
+					"medianRetainedEndDeltaBytes": 9846784,
+					"medianPairedReplayPeakDeltaBytes": 49152,
+					"medianPairedRetainedEndDeltaBytes": 49152
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 10223616,
+					"medianRetainedEndDeltaBytes": 10223616,
+					"medianPairedReplayPeakDeltaBytes": 139264,
+					"medianPairedRetainedEndDeltaBytes": 139264
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 10149888,
+					"medianRetainedEndDeltaBytes": 10158080,
+					"medianPairedReplayPeakDeltaBytes": 122880,
+					"medianPairedRetainedEndDeltaBytes": 122880
+				}
+			}
+		},
+		"unicode-width": {
+			"blocks": 20,
+			"outputSha256": "01ca66192f5d5f1be42c3830837534ee7238ba951943b86486694ded74b37177",
+			"ratios": {
+				"seg": {
+					"blocks": 20,
+					"medianSpeedup": 2.3381102232465665,
+					"ci95Speedup": [
+						2.2391407581085323,
+						2.5764944710222584
+					]
+				},
+				"md": {
+					"blocks": 20,
+					"medianSpeedup": 1.0195438059668585,
+					"ci95Speedup": [
+						0.9884736489630778,
+						1.0836318784678454
+					]
+				},
+				"both": {
+					"blocks": 20,
+					"medianSpeedup": 2.4014405646193504,
+					"ci95Speedup": [
+						2.3478294859787217,
+						2.516038230587261
+					]
+				}
+			},
+			"memory": {
+				"baseline": {
+					"medianReplayPeakDeltaBytes": 1048576,
+					"medianRetainedEndDeltaBytes": 1048576
+				},
+				"seg": {
+					"medianReplayPeakDeltaBytes": 1089536,
+					"medianRetainedEndDeltaBytes": 1089536,
+					"medianPairedReplayPeakDeltaBytes": 49152,
+					"medianPairedRetainedEndDeltaBytes": 49152
+				},
+				"md": {
+					"medianReplayPeakDeltaBytes": 1114112,
+					"medianRetainedEndDeltaBytes": 1114112,
+					"medianPairedReplayPeakDeltaBytes": 32768,
+					"medianPairedRetainedEndDeltaBytes": 32768
+				},
+				"both": {
+					"medianReplayPeakDeltaBytes": 1089536,
+					"medianRetainedEndDeltaBytes": 1089536,
+					"medianPairedReplayPeakDeltaBytes": 40960,
+					"medianPairedRetainedEndDeltaBytes": 40960
+				}
+			}
+		}
+	}
+}

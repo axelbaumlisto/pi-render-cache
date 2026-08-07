@@ -8,9 +8,9 @@
  *     Intl.Segmenter.prototype.segment writable+configurable;
  *   - behavioral canaries: Markdown render returns non-empty string[];
  *     seg-cache patched-vs-pristine differential (byte-equal) on a tiny corpus;
- *   - diagnostic (non-gating) signature checks against compatibility.json.
+ *   - exact pi/pi-tui compatibility-unit and implementation-hash gates.
  *
- * Exit 0 when supported, nonzero otherwise.
+ * Exit 0 only when the selected unit is structurally and exactly supported.
  *
  * Flags:
  *   --json               stdout is JSON ONLY (human output goes to stderr)
@@ -56,11 +56,6 @@ function check(name, ok, detail) {
 	report.checks.push({ name, ok, detail });
 	say(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 	return ok;
-}
-
-function diagnostic(name, ok, detail) {
-	report.diagnostics.push({ name, ok, detail });
-	say(`${ok ? "ok  " : "warn"}  [diagnostic] ${name}${detail ? ` — ${detail}` : ""}`);
 }
 
 let failed = false;
@@ -145,46 +140,45 @@ try {
 		failed |= !check("seg-cache differential canary byte-equal (miss+hit passes)", false, String(err));
 	}
 
-	// --- Diagnostic signature checks against compatibility.json (non-gating) ---
+	// --- Exact compatibility-unit and implementation-hash gates ---
 	let compat = null;
 	try {
 		compat = JSON.parse(fs.readFileSync(COMPAT_PATH, "utf8"));
 	} catch {
-		diagnostic("compatibility.json readable", false, COMPAT_PATH);
+		failed |= !check("compatibility.json readable", false, COMPAT_PATH);
 	}
 	if (compat) {
 		const entry = compat.versions?.[pi.version];
-		diagnostic(
+		failed |= !check(
 			`pi ${pi.version} listed in compatibility.json`,
 			!!entry,
-			entry ? `pi-tui expected ${entry.piTui}` : "unlisted version — diagnostic only",
+			entry ? `pi-tui expected ${entry.piTui}` : "unlisted version",
 		);
 		if (entry) {
-			diagnostic(
+			failed |= !check(
 				"pi-tui version matches compatibility entry",
 				entry.piTui === tui.version,
 				`expected ${entry.piTui}, got ${tui.version}`,
 			);
 			const allow = compat.implementationHashes?.[pi.version];
+			failed |= !check(
+				"implementation hash allowlist populated",
+				!!allow && Object.keys(allow).length > 0,
+				allow ? undefined : "empty — run: node scripts/check-upstream.mjs --update-allowlist",
+			);
 			if (allow && Object.keys(allow).length > 0) {
-				diagnostic(
+				failed |= !check(
 					"Markdown.prototype.render hash matches allowlist",
 					allow.markdownRender === report.hashes.markdownRender.djb2,
 					`allowlist ${allow.markdownRender}, observed ${report.hashes.markdownRender.djb2}`,
 				);
 				if (report.hashes.getMarkdownTheme) {
-					diagnostic(
+					failed |= !check(
 						"getMarkdownTheme hash matches allowlist",
 						allow.getMarkdownTheme === report.hashes.getMarkdownTheme.djb2,
 						`allowlist ${allow.getMarkdownTheme}, observed ${report.hashes.getMarkdownTheme.djb2}`,
 					);
 				}
-			} else {
-				diagnostic(
-					"implementation hash allowlist populated",
-					false,
-					"empty — run: node scripts/check-upstream.mjs --update-allowlist",
-				);
 			}
 		}
 		if (UPDATE_ALLOWLIST) {

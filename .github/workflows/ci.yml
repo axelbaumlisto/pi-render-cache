@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       compatibility_matrix:
-        description: Run the locked 0.80.7 and 0.82.1 compatibility fixtures
+        description: Run the locked 0.80.7, 0.82.1, and 0.84.1 compatibility fixtures
         required: false
         default: false
         type: boolean

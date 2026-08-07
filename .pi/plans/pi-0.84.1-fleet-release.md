@@ -42,9 +42,9 @@ Add 0.84.1 as an exact tested compatibility unit, run deterministic correctness 
 
 ## Verification
 
-- [ ] 84 deterministic tests and typecheck pass
-- [ ] 0.80.7, 0.82.1, and 0.84.1 exact compatibility fixtures pass
-- [ ] Full local 20-block release evidence passes byte-equality/activity/memory gates
+- [x] 85 deterministic tests and typecheck pass
+- [x] 0.80.7, 0.82.1, and 0.84.1 exact compatibility fixtures pass
+- [x] Full local 20-block release evidence passes byte-equality/activity/memory gates
 - [ ] npm 1.1.1, git commit/tag, and GitHub push agree
 - [ ] Every unique plugin host runs 1.1.1
 - [ ] Fleet A/B results remain environment-scoped and byte-identical

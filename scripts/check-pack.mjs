@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /** Validate the npm tarball against the intentionally shipped exact manifest. */
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +10,7 @@ const REQUIRED = [
 	"README.md",
 	"assets/screenshot.png",
 	"compatibility.json",
+	"docs/UPSTREAM_STATUS.md",
 	"extensions/index.ts",
 	"package.json",
 	"scripts/check-upstream.mjs",
@@ -21,9 +21,6 @@ const REQUIRED = [
 	"src/split.js",
 	"src/stats.js",
 ];
-// Task 7 creates this file. Once present it is mandatory and remains part of
-// the exact manifest; npm silently skips a missing `files` entry until then.
-const OPTIONAL_UNTIL_TASK_7 = ["docs/UPSTREAM_STATUS.md"];
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const packed = spawnSync(npm, ["pack", "--dry-run", "--json"], {
@@ -51,9 +48,6 @@ if (!Array.isArray(files)) {
 }
 
 const expected = new Set(REQUIRED);
-for (const relative of OPTIONAL_UNTIL_TASK_7) {
-	if (fs.existsSync(path.join(PROJECT_ROOT, relative))) expected.add(relative);
-}
 const actual = new Set(files.map((entry) => entry.path));
 const missing = [...expected].filter((file) => !actual.has(file)).sort();
 const unexpected = [...actual].filter((file) => !expected.has(file)).sort();
@@ -64,6 +58,4 @@ if (missing.length || unexpected.length) {
 	process.exit(1);
 }
 
-process.stdout.write(
-	`PASS exact package manifest (${actual.size} files${expected.has("docs/UPSTREAM_STATUS.md") ? ", upstream status included" : ", upstream status optional until Task 7"})\n`,
-);
+process.stdout.write(`PASS exact package manifest (${actual.size} files, upstream status included)\n`);

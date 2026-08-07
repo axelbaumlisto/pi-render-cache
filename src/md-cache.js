@@ -43,7 +43,7 @@ const THEME_SIGNATURE_CACHE = new WeakMap();
 // keeping the conservative hard bound; Tasks 6/7 may later pass calibrated
 // values directly after revisiting this compatibility contract.
 
-// Locked getMarkdownTheme() callback sources for pi 0.80.7 and 0.82.1.
+// Locked getMarkdownTheme() callback sources for pi 0.80.7, 0.82.1, and 0.84.1.
 // Keep this table synchronized with compatibility.json.markdownThemeSignature.
 export const CORE_THEME_SOURCE_HASHES = Object.freeze({
 	bold: "43793f0e",

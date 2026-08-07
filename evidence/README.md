@@ -14,4 +14,4 @@ Promotion verifies the checked-in replay corpus hash, byte-identical result hash
 
 ## Dependency model
 
-The package keeps wildcard pi and pi-tui peer ranges for runtime host flexibility: extension imports resolve through the host pi installation. Development dependencies pin both packages to the tested `0.82.1` compatibility unit so clean-clone typechecking and default CI resolution are deterministic. Exact older fixtures remain lockfile-pinned and are exercised by the on-demand compatibility matrix.
+The package keeps a wildcard pi peer range for runtime host flexibility; the pi-tui extension import resolves through the host pi installation rather than an independent pi-tui peer. Development dependencies pin both packages to the tested `0.84.1` compatibility unit so clean-clone typechecking and default CI resolution are deterministic. Exact older fixtures remain lockfile-pinned and are exercised by the on-demand compatibility matrix.

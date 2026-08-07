@@ -1,10 +1,10 @@
 # Upstream status and release evidence
 
-Checked **2026-08-07** against released pi **0.84.1**, commit [`53fa77ccd8a279eb87e92294ef3687b03ff80112`](https://github.com/earendil-works/pi/tree/53fa77ccd8a279eb87e92294ef3687b03ff80112), and newer upstream `main` commit [`958c13f25080b59d4b736193f972a8502a7a2f8b`](https://github.com/earendil-works/pi/tree/958c13f25080b59d4b736193f972a8502a7a2f8b). No intervening commit touches the four hot-path files, and both targets from #6665 remain present:
+Checked **2026-08-07** against released pi **0.84.1**, commit [`53fa77ccd8a279eb87e92294ef3687b03ff80112`](https://github.com/earendil-works/pi/tree/53fa77ccd8a279eb87e92294ef3687b03ff80112), and newer upstream `main` commit [`4bf1bba203c699a0b79da669b084052c72b7a35a`](https://github.com/earendil-works/pi/tree/4bf1bba203c699a0b79da669b084052c72b7a35a). No intervening commit touches the four hot-path files, and both targets from #6665 remain present:
 
-- [`AssistantMessageComponent.updateContent()` still clears its container](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L89-L95) and [constructs a fresh `Markdown`](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L104-L116) for streamed assistant text.
-- [`Markdown.render()` still lexes the complete transformed text](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/components/markdown.ts#L285-L303) on a cold component.
-- pi-tui still creates shared [`Intl.Segmenter` instances](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/utils.ts#L4-L18) and repeatedly calls `segment()`, including the [visible-width path](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/utils.ts#L270-L286).
+- [`AssistantMessageComponent.updateContent()` still clears its container](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L89-L95) and [constructs a fresh `Markdown`](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L104-L116) for streamed assistant text.
+- [`Markdown.render()` still lexes the complete transformed text](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/tui/src/components/markdown.ts#L285-L303) on a cold component.
+- pi-tui still creates shared [`Intl.Segmenter` instances](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/tui/src/utils.ts#L4-L18) and repeatedly calls `segment()`, including the [visible-width path](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/tui/src/utils.ts#L270-L286).
 
 ## Related upstream work
 
@@ -13,27 +13,27 @@ Checked **2026-08-07** against released pi **0.84.1**, commit [`53fa77ccd8a279eb
 - [#7082](https://github.com/earendil-works/pi/pull/7082) was closed without merge. It targets outer transcript/per-keystroke work, so it complements rather than removes Markdown rebuilds or segmentation calls.
 - [#6792](https://github.com/earendil-works/pi/issues/6792) is excluded from core-performance evidence: its reporter retracted the report after identifying an extension fault.
 
-## Controlled v1.1.0 evidence
+## Controlled v1.1.1 evidence
 
-Apple M3, Node 22.23.0, ICU 78.2, pi/pi-tui 0.82.1; 20 randomized complete blocks per workload and three repetitions per isolated mode run. Speedup is baseline divided by mode time; brackets are 95% paired whole-block bootstrap CIs. RSS values are median paired mode-minus-baseline replay-peak/retained-end deltas; negative is lower.
+Apple M3, Node 22.23.0, ICU 78.2, pi/pi-tui 0.84.1; 20 randomized complete blocks per workload and three repetitions per isolated mode run. Speedup is baseline divided by mode time; brackets are 95% paired whole-block bootstrap CIs. RSS values are median paired mode-minus-baseline replay-peak/retained-end deltas; negative is lower.
 
 | Workload | Mode | Median speedup [95% CI] | Paired RSS Δ peak / retained end (MiB) |
 |---|---|---:|---:|
-| ordinary Markdown | seg-cache | 1.38× [1.30, 1.60] | +0.31 / +0.25 |
-| ordinary Markdown | md-cache | 16.70× [14.97, 18.25] | -9.83 / -10.95 |
-| ordinary Markdown | both | 21.22× [20.03, 23.68] | -8.36 / -8.77 |
-| styled thinking | seg-cache | 1.61× [1.52, 1.69] | -0.46 / -0.46 |
-| styled thinking | md-cache fallback | 1.01× [0.87, 1.08] | +0.31 / +0.31 |
-| styled thinking | both | 1.64× [1.57, 1.70] | -0.35 / -0.35 |
-| Unicode width | seg-cache | 2.79× [2.50, 3.13] | +2.62 / +2.67 |
-| Unicode width | md-cache | n/a (no Markdown work) | -0.10 / -0.10 |
-| Unicode width | both | 2.97× [2.84, 3.11] | +3.45 / +3.75 |
+| ordinary Markdown | seg-cache | 1.51× [1.38, 1.59] | +0.53 / +0.53 |
+| ordinary Markdown | md-cache | 14.88× [13.03, 16.34] | -17.31 / -17.31 |
+| ordinary Markdown | both | 16.42× [14.85, 18.42] | -16.88 / -16.88 |
+| styled thinking | seg-cache | 1.50× [1.37, 1.58] | +0.05 / +0.05 |
+| styled thinking | md-cache fallback | 0.94× [0.88, 1.00] | +0.13 / +0.13 |
+| styled thinking | both | 1.50× [1.39, 1.64] | +0.12 / +0.12 |
+| Unicode width | seg-cache | 2.34× [2.24, 2.58] | +0.05 / +0.05 |
+| Unicode width | md-cache | n/a (no Markdown work) | +0.03 / +0.03 |
+| Unicode width | both | 2.40× [2.35, 2.52] | +0.04 / +0.04 |
 
-All Checkpoint B paired replay-peak RSS gates passed the +20 MiB limit; the worst median increase was +3.45 MiB.
+All Checkpoint B paired replay-peak RSS gates passed the +20 MiB limit; the worst median increase was +0.53 MiB.
 
-The durable sanitized result, environment, hashes, and exact unrounded values are in [`evidence/v1.1.0/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.0/evidence/v1.1.0/summary.json). From a source checkout, reproduce the full run with `npm run premise`; use `npm run test:perf` for a short non-release performance check and `npm run compat` for the selected compatibility unit.
+The durable sanitized result, environment, hashes, and exact unrounded values are in [`evidence/v1.1.1/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.1/evidence/v1.1.1/summary.json). From a source checkout, reproduce the full run with `npm run premise`; use `npm run test:perf` for a short non-release performance check and `npm run compat` for the selected compatibility unit.
 
-On pi 0.82.1 both patches are **active** after their independent canaries. `md-cache` deliberately falls back for styled thinking because it has a non-null text style; that path is enforced by tests and is not claimed as cacheable. `seg-cache` remains active there and produced about 1.6× in the controlled replay.
+On pi 0.84.1 both patches are **active** after their independent canaries. `md-cache` deliberately falls back for styled thinking and Markdown transformer options; these paths are enforced by tests and are not claimed as cacheable. `seg-cache` remains active there and produced about 1.5× in the controlled thinking replay.
 
 ## Live pi 0.82.1 smoke check
 
