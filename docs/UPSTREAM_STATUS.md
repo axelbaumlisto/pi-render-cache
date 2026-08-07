@@ -1,9 +1,10 @@
 # Upstream status and release evidence
 
-Checked **2026-07-25** against pi **0.82.1**, commit [`b4f293684bba718d59cc1157679bcf6157b3a7f5`](https://github.com/earendil-works/pi/tree/b4f293684bba718d59cc1157679bcf6157b3a7f5), and upstream `main`. Both hot paths from #6665 were still present:
+Checked **2026-08-07** against released pi **0.84.1**, commit [`53fa77ccd8a279eb87e92294ef3687b03ff80112`](https://github.com/earendil-works/pi/tree/53fa77ccd8a279eb87e92294ef3687b03ff80112), and newer upstream `main` commit [`958c13f25080b59d4b736193f972a8502a7a2f8b`](https://github.com/earendil-works/pi/tree/958c13f25080b59d4b736193f972a8502a7a2f8b). No intervening commit touches the four hot-path files, and both targets from #6665 remain present:
 
-- [`AssistantMessageComponent.updateContent()` clears its container and constructs a new `Markdown`](https://github.com/earendil-works/pi/blob/b4f293684bba718d59cc1157679bcf6157b3a7f5/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L83-L103) for streamed assistant text (styled thinking is also rebuilt at [lines 105–140](https://github.com/earendil-works/pi/blob/b4f293684bba718d59cc1157679bcf6157b3a7f5/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L105-L140)).
-- pi-tui creates shared [`Intl.Segmenter` instances](https://github.com/earendil-works/pi/blob/b4f293684bba718d59cc1157679bcf6157b3a7f5/packages/tui/src/utils.ts#L4-L18) and repeatedly calls `segment()`, including the visible-width path at [lines 247–263](https://github.com/earendil-works/pi/blob/b4f293684bba718d59cc1157679bcf6157b3a7f5/packages/tui/src/utils.ts#L247-L263).
+- [`AssistantMessageComponent.updateContent()` still clears its container](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L89-L95) and [constructs a fresh `Markdown`](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L104-L116) for streamed assistant text.
+- [`Markdown.render()` still lexes the complete transformed text](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/components/markdown.ts#L285-L303) on a cold component.
+- pi-tui still creates shared [`Intl.Segmenter` instances](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/utils.ts#L4-L18) and repeatedly calls `segment()`, including the [visible-width path](https://github.com/earendil-works/pi/blob/958c13f25080b59d4b736193f972a8502a7a2f8b/packages/tui/src/utils.ts#L270-L286).
 
 ## Related upstream work
 

@@ -96,6 +96,7 @@ A supported compatibility unit is one selected pi installation and the pi-tui co
 |---|---|---|---|---|
 | 0.80.7 | locked transitive 0.80.7 | `>=22.19.0` | active after canaries | active after canaries |
 | 0.82.1 | locked transitive 0.82.1 | `>=22.19.0` | active after canaries | active after canaries |
+| 0.84.1 | locked transitive 0.84.1 | `>=22.19.0` | active after canaries | active after canaries |
 | Other/future | resolved from selected pi | host-compatible | disables itself as unsupported until allowlisted | evaluated independently; active only if the native Segmenter canary passes |
 
 Unknown pi versions therefore do not cause an all-or-nothing shutdown: md-cache refuses unknown Markdown/theme implementations, while seg-cache can remain active if its independent structural and differential checks pass.
@@ -120,14 +121,14 @@ The benchmark engine and test fixtures are repository tooling, not included in t
 
 ```bash
 npm run verify          # 84 tests, typecheck, selected-unit compat, exact pack manifest
-npm run compat:matrix   # locked pi 0.80.7 and 0.82.1 fixtures
+npm run compat:matrix   # locked pi 0.80.7, 0.82.1, and 0.84.1 fixtures
 npm run premise         # full 20-block controlled replay and evaluator
 npm run test:perf       # short 3-block maintainer check; not release evidence
 ```
 
 ## Upstream context
 
-As checked on 2026-07-25, pi 0.82.1 (`b4f293684bba718d59cc1157679bcf6157b3a7f5`) and upstream `main` still contain both hot paths.
+As checked on 2026-08-07, released pi 0.84.1 (`53fa77ccd8a279eb87e92294ef3687b03ff80112`) and newer upstream `main` (`958c13f25080b59d4b736193f972a8502a7a2f8b`) still contain both hot paths. The intervening commits do not touch the streaming assistant, Markdown renderer, or Segmenter call sites.
 
 - [#6665](https://github.com/earendil-works/pi/issues/6665) is open, assigned, and in progress.
 - [#7017](https://github.com/earendil-works/pi/pull/7017) and [#7082](https://github.com/earendil-works/pi/pull/7082) were closed without merge and address complementary outer rendering layers; neither removes both inner cache targets.
