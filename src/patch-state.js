@@ -65,21 +65,18 @@ export function resetLifecycle() {
 // ---------------------------------------------------------------------------
 
 /**
- * Select the Markdown implementation hash only for an exact tested pi/pi-tui
- * compatibility unit. A hash reused by an unlisted or mismatched future unit
- * is not sufficient by itself.
+ * Select every known-good Markdown implementation hash from compatibility.json.
+ * This intentionally does NOT bind activation to a pi/pi-tui version: patching
+ * is allowed whenever the current Markdown.render source still matches any
+ * previously verified implementation. Unknown source hashes still fail closed.
  * @param {object} compatibility parsed compatibility.json
- * @param {string} piVersion selected pi version
- * @param {string} piTuiVersion pi-tui resolved from that selected pi
- * @returns {string[]} zero or one allowlisted hash
+ * @returns {string[]} unique allowlisted hashes
  */
-export function selectMarkdownAllowlistHashes(compatibility, piVersion, piTuiVersion) {
-	const unit = compatibility?.versions?.[piVersion];
-	const hash = compatibility?.implementationHashes?.[piVersion]?.markdownRender;
-	if (!unit || unit.piTui !== piTuiVersion || typeof hash !== "string" || hash.length === 0) {
-		return [];
-	}
-	return [hash];
+export function selectMarkdownAllowlistHashes(compatibility) {
+	const hashes = Object.values(compatibility?.implementationHashes ?? {})
+		.map((entry) => entry?.markdownRender)
+		.filter((hash) => typeof hash === "string" && hash.length > 0);
+	return [...new Set(hashes)];
 }
 
 /**

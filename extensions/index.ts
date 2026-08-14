@@ -6,9 +6,9 @@
  *
  * All decision/transition logic lives in src/patch-state.js so tests can drive
  * the real code without a pi host. Per-patch lifecycle:
- *   - md-cache installs ONLY when the selected exact pi/pi-tui unit is listed
- *     and djb2(Markdown.prototype.render.toString()) matches that unit's hash
- *     in compatibility.json; unknown/mismatched unit → "unsupported", never patched.
+ *   - md-cache installs when djb2(Markdown.prototype.render.toString()) matches
+ *     any known-good hash in compatibility.json; unknown implementation hashes
+ *     → "unsupported", never patched.
  *   - seg-cache is evaluated INDEPENDENTLY (descriptor writable+configurable
  *     plus a native-behavior canary); one patch's failure never affects the other.
  *   - Shared state on globalThis symbols lets /reload adopt; a foreign function
@@ -34,16 +34,14 @@ import {
 import { getStats as segStats } from "../src/seg-cache.js";
 import { resolvePiRoot, resolvePiTui } from "../scripts/resolve-pi.mjs";
 
-/** Allowlisted Markdown.render hash for the exact selected pi/pi-tui unit. */
+/** Allowlisted Markdown.render hashes for every known-good implementation. */
 function loadAllowlistHashes(): string[] {
 	try {
 		const url = new URL("../compatibility.json", import.meta.url);
 		const compat = JSON.parse(fs.readFileSync(url, "utf8"));
-		const piInfo = resolvePiRoot();
-		const piTuiInfo = resolvePiTui(piInfo.root);
-		return selectMarkdownAllowlistHashes(compat, piInfo.version, piTuiInfo.version);
+		return selectMarkdownAllowlistHashes(compat);
 	} catch {
-		return []; // unreadable/missing/unresolved unit → md unsupported
+		return []; // unreadable/missing compatibility data → md unsupported
 	}
 }
 

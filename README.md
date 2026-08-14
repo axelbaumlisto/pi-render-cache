@@ -90,14 +90,14 @@ There is nothing to configure. Run:
 
 ## Compatibility
 
-A supported compatibility unit is one selected pi installation and the pi-tui copy resolved from it.
+md-cache compatibility is keyed by the `Markdown.prototype.render` implementation hash, not by the selected pi/pi-tui version. A future pi build that reuses a known-good Markdown renderer can activate automatically; an unknown renderer hash still fails closed until checked and allowlisted.
 
 | pi | pi-tui | Node | md-cache | seg-cache |
 |---|---|---|---|---|
 | 0.80.7 | locked transitive 0.80.7 | `>=22.19.0` | active after canaries | active after canaries |
 | 0.82.1 | locked transitive 0.82.1 | `>=22.19.0` | active after canaries | active after canaries |
 | 0.84.1 | locked transitive 0.84.1 | `>=22.19.0` | active after canaries | active after canaries |
-| Other/future | resolved from selected pi | host-compatible | disables itself as unsupported until allowlisted | evaluated independently; active only if the native Segmenter canary passes |
+| Other/future | resolved from selected pi | host-compatible | active when Markdown.render hash is known; otherwise unsupported | evaluated independently; active only if the native Segmenter canary passes |
 
 Unknown pi versions therefore do not cause an all-or-nothing shutdown: md-cache refuses unknown Markdown/theme implementations, while seg-cache can remain active if its independent structural and differential checks pass.
 
