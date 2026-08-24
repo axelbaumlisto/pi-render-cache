@@ -1,58 +1,66 @@
 /**
- * render-cache — pi extension (thin wiring layer, plan Task 2).
+ * render-cache — pi extension (thin wiring layer).
  *
  * Patches Markdown.prototype.render (incremental streaming render, src/md-cache.js)
  * and Intl.Segmenter.prototype.segment (ICU memoization, src/seg-cache.js).
  *
  * All decision/transition logic lives in src/patch-state.js so tests can drive
  * the real code without a pi host. Per-patch lifecycle:
- *   - md-cache installs when djb2(Markdown.prototype.render.toString()) matches
- *     any known-good hash in compatibility.json; unknown implementation hashes
- *     → "unsupported", never patched.
+ *   - md-cache (v1.2.0) has NO implementation-hash or pi-version allowlist:
+ *     a fresh install runs a behavioral differential canary on the REAL host
+ *     prototypes (patched vs pristine byte equality on a representative corpus
+ *     with the host's markdown theme) and stays "unsupported" on any mismatch
+ *     or when the canary produces no cache activity. At runtime, sampled
+ *     miss-time self-verification re-checks stitched output against the
+ *     original renderer and permanently falls back on divergence.
  *   - seg-cache is evaluated INDEPENDENTLY (descriptor writable+configurable
  *     plus a native-behavior canary); one patch's failure never affects the other.
  *   - Shared state on globalThis symbols lets /reload adopt; a foreign function
  *     where ours/original should be → "ownership-lost", never layer, never
  *     restore, restart required.
- * Counters are observability only — there is NO zero-activity self-disable.
+ * Counters are observability only — there is NO zero-activity self-disable
+ * after activation.
  *
  * pi-tui via BARE specifier only: jiti aliases it to pi's own copy → same
- * prototype pi renders with. NEVER a plugin dep.
+ * prototype pi renders with. NEVER a plugin dep. The markdown theme module is
+ * resolved FROM the selected pi root (scripts/resolve-pi.mjs) and shares live
+ * theme state with the host through the global theme symbol.
  */
-import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, Markdown } from "@earendil-works/pi-tui";
 import { getStats as mdStats } from "../src/md-cache.js";
-import {
-	mdOwnership,
-	segOwnership,
-	selectMarkdownAllowlistHashes,
-	setupMd,
-	setupSeg,
-	summary,
-} from "../src/patch-state.js";
+import { mdOwnership, segOwnership, setupMd, setupSeg, summary } from "../src/patch-state.js";
 import { getStats as segStats } from "../src/seg-cache.js";
-import { resolvePiRoot, resolvePiTui } from "../scripts/resolve-pi.mjs";
+import { resolvePiRoot, resolveThemeModule } from "../scripts/resolve-pi.mjs";
 
-/** Allowlisted Markdown.render hashes for every known-good implementation. */
-function loadAllowlistHashes(): string[] {
+const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
+
+/**
+ * Load the host's markdown theme for the differential canary. The theme module
+ * file shares live theme state with the bundled host through the global theme
+ * symbol, so getMarkdownTheme() reflects the active theme. Returns null when
+ * unavailable (md-cache then stays "unsupported" — fail closed).
+ */
+async function loadMarkdownTheme(): Promise<object | null> {
 	try {
-		const url = new URL("../compatibility.json", import.meta.url);
-		const compat = JSON.parse(fs.readFileSync(url, "utf8"));
-		return selectMarkdownAllowlistHashes(compat);
+		const root = resolvePiRoot().root;
+		const themePath = resolveThemeModule(root).path;
+		const mod = await import(pathToFileURL(themePath).href);
+		if (!(globalThis as Record<symbol, unknown>)[THEME_KEY] && typeof mod.initTheme === "function") {
+			mod.initTheme("dark"); // no watcher; host re-initializes with the user's theme
+		}
+		const theme = typeof mod.getMarkdownTheme === "function" ? mod.getMarkdownTheme() : null;
+		return theme !== null && typeof theme === "object" ? theme : null;
 	} catch {
-		return []; // unreadable/missing compatibility data → md unsupported
+		return null;
 	}
 }
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
 	// Evaluate each patch INDEPENDENTLY; failures never cross over.
-	const md = setupMd({
-		Markdown,
-		getCapabilities,
-		allowlistHashes: loadAllowlistHashes(),
-		budgetChars: 2_000_000,
-	});
+	const theme = await loadMarkdownTheme();
+	const md = setupMd({ Markdown, getCapabilities, theme, budgetChars: 2_000_000 });
 	const seg = setupSeg({ budgetChars: 2_000_000 });
 
 	// Notify only when something is NOT active, with per-patch reason.

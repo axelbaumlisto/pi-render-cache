@@ -1,5 +1,5 @@
 {
-	"$comment": "Versions record tested pi/pi-tui units, but md-cache activation is keyed by implementationHashes, not by exact pi/pi-tui version. implementationHashes are djb2 hex hashes of Markdown.prototype.render.toString() and getMarkdownTheme.toString() for checked fixtures; populate/refresh with: PI_PACKAGE_ROOT=<fixture-root> node scripts/check-upstream.mjs --update-allowlist. Hash checks are diagnostic compatibility gates, not security authentication.",
+	"$comment": "DIAGNOSTIC RECORD ONLY (since v1.2.0). Nothing here gates activation: md-cache activates via a runtime behavioral differential canary (patched-vs-original byte equality on the real host prototypes) plus sampled miss-time self-verification, and seg-cache via its independent structural+native canaries. versions and implementationHashes record tested pi/pi-tui units and observed djb2 hex hashes of Markdown.prototype.render.toString() / getMarkdownTheme.toString() for reproducibility; refresh with: PI_PACKAGE_ROOT=<fixture-root> node scripts/check-upstream.mjs --update-allowlist.",
 	"node": ">=22.19.0",
 	"versions": {
 		"0.80.7": {
@@ -22,6 +22,13 @@
 				"md-cache": "expected-active",
 				"seg-cache": "expected-active"
 			}
+		},
+		"0.84.3": {
+			"piTui": "0.84.3",
+			"patches": {
+				"md-cache": "expected-active",
+				"seg-cache": "expected-active"
+			}
 		}
 	},
 	"implementationHashes": {
@@ -36,33 +43,11 @@
 		"0.84.1": {
 			"markdownRender": "cea3fb87",
 			"getMarkdownTheme": "b8b6a5a8"
-		}
-	},
-	"markdownThemeSignature": {
-		"$comment": "Shared by the locked 0.80.7, 0.82.1, and 0.84.1 fixtures. versions permits a future per-version override. codeBlockIndent is the optional string added by interactive mode's spread wrapper. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.",
-		"shared": {
-			"functionSourceHashes": {
-				"bold": "43793f0e",
-				"code": "433573d6",
-				"codeBlock": "764046a1",
-				"codeBlockBorder": "544bbfdf",
-				"heading": "2b6ea36b",
-				"highlightCode": "d579802b",
-				"hr": "207f1df5",
-				"italic": "c12ab783",
-				"link": "beebce09",
-				"linkUrl": "ef629a9c",
-				"listBullet": "31da633f",
-				"quote": "3932d489",
-				"quoteBorder": "9afb1bc7",
-				"strikethrough": "e75a5770",
-				"underline": "8d0df633"
-			},
-			"optionalOwnProperties": {
-				"codeBlockIndent": "string"
-			}
 		},
-		"versions": {}
+		"0.84.3": {
+			"markdownRender": "cea3fb87",
+			"getMarkdownTheme": "b8b6a5a8"
+		}
 	},
 	"cacheBudgetCalibration": {
 		"$comment": "budgetChars remains the legacy source-char-era input for extension compatibility. Cache modules translate it to conservative retained-cost units; Tasks 6/7 may replace this bridge with directly calibrated values. Approximate KiB figures describe estimate units, not measured heap bytes.",

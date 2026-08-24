@@ -7,14 +7,14 @@
  * restore-only-if-ours with state PRESERVED on ownership loss, and
  * never-layer-over-a-foreign-wrapper on reinstall/reload.
  */
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadPiTui, loadTheme } from "./helpers.js";
 
 const tui = await loadPiTui();
-await loadTheme(); // ensure global theme initialized (md render path)
+const themeMod = await loadTheme(); // ensure global theme initialized (md render path)
 const { Markdown, getCapabilities } = tui;
+const mdTheme = themeMod.getMarkdownTheme();
 
 const segMod = await import("../src/seg-cache.js");
 const mdMod = await import("../src/md-cache.js");
@@ -26,24 +26,36 @@ const LIFECYCLE_KEY = Symbol.for("render-cache:lifecycle:v1");
 
 const NATIVE_SEGMENT = Intl.Segmenter.prototype.segment;
 const ORIG_RENDER = Markdown.prototype.render;
-const RENDER_ALLOWLIST = [mdMod.hashString(ORIG_RENDER.toString())];
-const COMPATIBILITY = JSON.parse(
-	readFileSync(new URL("../compatibility.json", import.meta.url), "utf8"),
-);
 
-test("compatibility.json theme signature stays in sync with CORE_THEME_SOURCE_HASHES", () => {
-	assert.deepEqual(
-		COMPATIBILITY.markdownThemeSignature.shared.functionSourceHashes,
-		mdMod.CORE_THEME_SOURCE_HASHES,
-	);
+test("evaluateMdSupport is structural: fresh pristine host → install decision, no allowlist consulted", () => {
+	const ev = ps.evaluateMdSupport(Markdown);
+	assert.equal(ev.decision, "install");
+	assert.equal(typeof ev.hash, "string", "hash reported for diagnostics only");
 });
 
-test("Markdown allowlist selection is implementation-hash based, not version-bound", () => {
-	assert.deepEqual(ps.selectMarkdownAllowlistHashes(COMPATIBILITY).sort(), [
-		"9ff0fb16",
-		"cea3fb87",
-	]);
-	assert.deepEqual(ps.selectMarkdownAllowlistHashes({}), []);
+test("fresh setupMd without a theme → unsupported (fail closed), nothing patched", () => {
+	delete globalThis[MD_STATE_KEY];
+	delete globalThis[LIFECYCLE_KEY];
+	try {
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: null });
+		assert.equal(md.state, "unsupported");
+		assert.match(md.reason, /theme unavailable/);
+		assert.equal(Markdown.prototype.render, ORIG_RENDER, "md must not be patched");
+	} finally {
+		delete globalThis[MD_STATE_KEY];
+		delete globalThis[LIFECYCLE_KEY];
+		Markdown.prototype.render = ORIG_RENDER;
+	}
+});
+
+test("canaryVerify passes on the real host and fails closed without a theme", () => {
+	const ok = mdMod.canaryVerify({ Markdown, getCapabilities, theme: mdTheme });
+	assert.deepEqual(ok, { ok: true });
+	assert.equal(Markdown.prototype.render, ORIG_RENDER, "canary must uninstall after itself");
+	const noTheme = mdMod.canaryVerify({ Markdown, getCapabilities, theme: null });
+	assert.equal(noTheme.ok, false);
+	assert.match(noTheme.reason, /theme unavailable/);
+	assert.equal(Markdown.prototype.render, ORIG_RENDER, "no-theme refusal leaves the prototype pristine");
 });
 
 /** Hard reset of all shared globals + prototypes between lifecycle tests. */
@@ -136,7 +148,7 @@ test("version-drift scenario: state present + prototype replaced by unknown fn �
 	};
 	Markdown.prototype.render = alien;
 	try {
-		const ev = ps.evaluateMdSupport(Markdown, RENDER_ALLOWLIST);
+		const ev = ps.evaluateMdSupport(Markdown);
 		assert.equal(ev.decision, "ownership-lost", "guard must flag an alien render over live state");
 	} finally {
 		fullReset();
@@ -147,16 +159,16 @@ test("version-drift scenario: state present + prototype replaced by unknown fn �
 // Task 2 integration/controller tests: real setup/teardown transitions
 // ---------------------------------------------------------------------------
 
-test("fresh incompatible Markdown.render → md unsupported (with hash reason), seg installs active", () => {
+test("fresh incompatible Markdown.render → md unsupported (differential canary), seg installs active", () => {
 	fullReset();
 	const alien = function render(_width) {
 		return ["alien"];
 	};
 	Markdown.prototype.render = alien;
 	try {
-		const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		assert.equal(md.state, "unsupported");
-		assert.match(md.reason, /unknown Markdown\.render implementation \(hash [0-9a-f]+\)/);
+		assert.match(md.reason, /differential canary/);
 		assert.equal(Markdown.prototype.render, alien, "md must not be patched");
 		assert.equal(globalThis[MD_STATE_KEY], undefined, "no md shared state created");
 
@@ -188,7 +200,7 @@ test("seg-only failure (broken segment canary) → seg unsupported, md installs 
 		assert.equal(Intl.Segmenter.prototype.segment, broken, "seg must not be patched");
 		assert.equal(globalThis[SEG_STATE_KEY], undefined, "no seg shared state created");
 
-		const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		assert.equal(md.state, "active", "md decision must be independent of seg failure");
 		assert.notEqual(Markdown.prototype.render, ORIG_RENDER, "md must be patched");
 	} finally {
@@ -221,7 +233,7 @@ test("both fail → both unsupported, nothing patched", () => {
 	Markdown.prototype.render = alienRender;
 	Intl.Segmenter.prototype.segment = alienSegment;
 	try {
-		const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		const seg = ps.setupSeg();
 		assert.equal(md.state, "unsupported");
 		assert.equal(seg.state, "unsupported");
@@ -237,7 +249,7 @@ test("both fail → both unsupported, nothing patched", () => {
 test("foreign wrapper OVER ours → teardown reports ownership-lost, state preserved", () => {
 	fullReset();
 	try {
-		assert.equal(ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST }).state, "active");
+		assert.equal(ps.setupMd({ Markdown, getCapabilities, theme: mdTheme }).state, "active");
 		assert.equal(ps.setupSeg().state, "active");
 		const oursMd = Markdown.prototype.render;
 		const oursSeg = Intl.Segmenter.prototype.segment;
@@ -269,7 +281,7 @@ test("foreign wrapper OVER ours → teardown reports ownership-lost, state prese
 test("reload after ownership loss → refuses to layer (prototype unchanged, no double wrapper)", () => {
 	fullReset();
 	try {
-		ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		ps.setupSeg();
 		const oursMd = Markdown.prototype.render;
 		const oursSeg = Intl.Segmenter.prototype.segment;
@@ -283,7 +295,7 @@ test("reload after ownership loss → refuses to layer (prototype unchanged, no 
 		Intl.Segmenter.prototype.segment = foreignSeg;
 
 		// Simulate /reload: fresh setup pass with live shared state + foreign fn.
-		const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		const seg = ps.setupSeg();
 		assert.equal(md.state, "ownership-lost");
 		assert.equal(seg.state, "ownership-lost");
@@ -306,14 +318,14 @@ test("repeated install/uninstall happy path → idempotent, lifecycle transition
 	fullReset();
 	try {
 		for (let round = 0; round < 3; round++) {
-			const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+			const md = ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 			const seg = ps.setupSeg();
 			assert.equal(md.state, "active", `round ${round}: md active`);
 			assert.equal(seg.state, "active", `round ${round}: seg active`);
 			const patchedMd = Markdown.prototype.render;
 			const patchedSeg = Intl.Segmenter.prototype.segment;
 			// Idempotent double-setup: same wrapper identity, still active.
-			ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+			ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 			ps.setupSeg();
 			assert.equal(Markdown.prototype.render, patchedMd, `round ${round}: no md re-wrap`);
 			assert.equal(Intl.Segmenter.prototype.segment, patchedSeg, `round ${round}: no seg re-wrap`);
@@ -339,14 +351,14 @@ test("repeated install/uninstall happy path → idempotent, lifecycle transition
 test("reload adoption: shared state + our patch on prototype → adopt, stays active", () => {
 	fullReset();
 	try {
-		ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		ps.setupSeg();
 		const mdState = globalThis[MD_STATE_KEY];
 		const segState = globalThis[SEG_STATE_KEY];
 		// Simulate /reload: lifecycle record survives on globalThis; setup adopts.
-		const md = ps.setupMd({ Markdown, getCapabilities, allowlistHashes: [] }); // allowlist irrelevant on adopt
+		const md = ps.setupMd({ Markdown, getCapabilities, theme: null }); // theme irrelevant on adopt (no canary re-run)
 		const seg = ps.setupSeg();
-		assert.equal(md.state, "active", "adopt path must not consult the allowlist");
+		assert.equal(md.state, "active", "adopt path must not re-run the canary");
 		assert.equal(seg.state, "active");
 		assert.equal(globalThis[MD_STATE_KEY], mdState, "same shared md state");
 		assert.equal(globalThis[SEG_STATE_KEY], segState, "same shared seg state");
@@ -362,7 +374,7 @@ test("lifecycle summary + ownership introspection reflect live prototypes", () =
 	try {
 		assert.equal(ps.mdOwnership(Markdown), "none");
 		assert.equal(ps.segOwnership(), "none");
-		ps.setupMd({ Markdown, getCapabilities, allowlistHashes: RENDER_ALLOWLIST });
+		ps.setupMd({ Markdown, getCapabilities, theme: mdTheme });
 		ps.setupSeg();
 		assert.equal(ps.mdOwnership(Markdown), "ours");
 		assert.equal(ps.segOwnership(), "ours");

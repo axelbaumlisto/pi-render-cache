@@ -334,26 +334,33 @@ test("supported theme source signature is memoized while output fingerprint stay
 	}
 });
 
-test("non-matching callback sources and mutable extra-key theme fall back without analysis calls", () => {
+test("deterministic custom-source theme is cacheable (v1.2.0 contractual acceptance)", () => {
+	// v1.2.0 removed the locked-source allowlist: a theme with DIFFERENT callback
+	// sources but the exact MarkdownTheme shape and deterministic outputs is now
+	// cached (keyed by its output fingerprint) instead of falling back.
+	install({ Markdown, getCapabilities });
+	try {
+		const doc = "plain alpha\n\nplain beta\n";
+		const custom = {
+			...mdTheme,
+			bold: (text) => `<<${text}>>`, // custom deterministic implementation
+		};
+		const expected = origRender.call(new Markdown(doc, 1, 0, custom), 80);
+		const before = getStats();
+		assert.deepEqual(new Markdown(doc, 1, 0, custom).render(80), expected, "custom theme bytes match orig");
+		assert.equal(getStats().misses, before.misses + 1, "custom deterministic theme is cacheable (miss)");
+		assert.deepEqual(new Markdown(doc, 1, 0, custom).render(80), expected, "hit bytes match orig");
+		assert.equal(getStats().hits, before.hits + 1, "custom deterministic theme hits");
+	} finally {
+		uninstall();
+	}
+});
+
+test("mutable extra-key theme falls back without any analysis callback invocation", () => {
 	install({ Markdown, getCapabilities });
 	try {
 		const doc = "plain alpha\n\nplain beta\n";
 		const expected = renderOrig(doc, 80);
-		for (const key of Object.keys(mdTheme)) {
-			let calls = 0;
-			const changed = {
-				...mdTheme,
-				[key]: () => {
-					calls++;
-					return key === "highlightCode" ? ["changed-output"] : "changed-output";
-				},
-			};
-			const before = getStats();
-			assert.deepEqual(new Markdown(doc, 1, 0, changed).render(80), expected, `${key}: pristine fallback output`);
-			assert.equal(getStats().fallbacks, before.fallbacks + 1, `${key}: source mismatch falls back`);
-			assert.equal(calls, 0, `${key}: changed callback was not invoked by analysis or plain rendering`);
-		}
-
 		let proxyCalls = 0;
 		const mutable = { extraMutableField: 1 };
 		for (const [key, callback] of Object.entries(mdTheme)) {
@@ -368,6 +375,53 @@ test("non-matching callback sources and mutable extra-key theme fall back withou
 		assert.deepEqual(new Markdown(doc, 1, 0, mutable).render(80), expected);
 		assert.equal(getStats().fallbacks, before.fallbacks + 1, "extra own key rejects mutable custom theme");
 		assert.equal(proxyCalls, 0, "shape rejection invokes no render callback");
+
+		// Non-function core key also fails the shape contract without invocation.
+		const brokenType = { ...mdTheme, bold: "not-a-function" };
+		const b2 = getStats();
+		assert.deepEqual(new Markdown(doc, 1, 0, brokenType).render(80), expected);
+		assert.equal(getStats().fallbacks, b2.fallbacks + 1, "non-function core key falls back");
+	} finally {
+		uninstall();
+	}
+});
+
+test("sampled miss-time self-verification blacklists a decomposition-breaking renderer", () => {
+	// A stand-in Markdown class whose render output CANNOT be reproduced by
+	// stitching prefix+tail renders: it appends a count of all lines. The first
+	// verified fill must detect the divergence, blacklist the theme, fall back,
+	// and still return the correct-by-definition original output.
+	class FakeMarkdown {
+		constructor(text, paddingX, paddingY, theme) {
+			this.text = text;
+			this.paddingX = paddingX;
+			this.paddingY = paddingY;
+			this.theme = theme;
+			this.defaultTextStyle = null;
+			this.options = null;
+		}
+		render(_width) {
+			const lines = this.text.split("\n").filter((l) => l !== "");
+			return [...lines, `TOTAL:${lines.length}`]; // stitching cannot reproduce TOTAL
+		}
+	}
+	const shapeTheme = {};
+	for (const key of Object.keys(mdTheme)) shapeTheme[key] = (x) => String(x);
+	shapeTheme.highlightCode = (code) => [String(code)];
+	const doc = "alpha block\n\nbeta tail line\n";
+	const res = install({ Markdown: FakeMarkdown, getCapabilities });
+	assert.equal(res.installed, true);
+	try {
+		const pristine = ["alpha block", "beta tail line", "TOTAL:2"];
+		const before = getStats();
+		const out = new FakeMarkdown(doc, 1, 0, shapeTheme).render(80);
+		assert.deepEqual(out, pristine, "divergence detected → original output returned");
+		assert.equal(getStats().fallbacks, before.fallbacks + 1, "verification failure counts as fallback");
+		// Theme is now blacklisted: subsequent renders fall back immediately.
+		const b2 = getStats();
+		assert.deepEqual(new FakeMarkdown(doc, 1, 0, shapeTheme).render(80), pristine);
+		assert.equal(getStats().fallbacks, b2.fallbacks + 1, "blacklisted theme falls back");
+		assert.equal(getStats().hits, before.hits, "no cache hits after blacklisting");
 	} finally {
 		uninstall();
 	}

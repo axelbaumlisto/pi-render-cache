@@ -33,6 +33,8 @@ All Checkpoint B paired replay-peak RSS gates passed the +20 MiB limit; the wors
 
 The durable sanitized result, environment, hashes, and exact unrounded values are in [`evidence/v1.1.1/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.1/evidence/v1.1.1/summary.json). From a source checkout, reproduce the full run with `npm run premise`; use `npm run test:perf` for a short non-release performance check and `npm run compat` for the selected compatibility unit.
 
+Since v1.2.0, activation is decided behaviorally at startup (md-cache differential canary + sampled miss-time self-verification; seg-cache structural + native canary) — the pi version and implementation hashes recorded in `compatibility.json` are diagnostic bookkeeping only. pi 0.84.3 was verified as a tested unit with identical `Markdown.prototype.render`/`getMarkdownTheme` hashes to 0.84.1.
+
 On pi 0.84.1 both patches are **active** after their independent canaries. `md-cache` deliberately falls back for styled thinking and Markdown transformer options; these paths are enforced by tests and are not claimed as cacheable. `seg-cache` remains active there and produced about 1.5× in the controlled thinking replay.
 
 ## Live pi 0.82.1 smoke check

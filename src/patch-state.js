@@ -17,6 +17,7 @@
  * other patch's state.
  */
 import {
+	canaryVerify,
 	hashString,
 	install as installMd,
 	uninstall as uninstallMd,
@@ -65,28 +66,14 @@ export function resetLifecycle() {
 // ---------------------------------------------------------------------------
 
 /**
- * Select every known-good Markdown implementation hash from compatibility.json.
- * This intentionally does NOT bind activation to a pi/pi-tui version: patching
- * is allowed whenever the current Markdown.render source still matches any
- * previously verified implementation. Unknown source hashes still fail closed.
- * @param {object} compatibility parsed compatibility.json
- * @returns {string[]} unique allowlisted hashes
- */
-export function selectMarkdownAllowlistHashes(compatibility) {
-	const hashes = Object.values(compatibility?.implementationHashes ?? {})
-		.map((entry) => entry?.markdownRender)
-		.filter((hash) => typeof hash === "string" && hash.length > 0);
-	return [...new Set(hashes)];
-}
-
-/**
  * Decide whether md-cache may install against this Markdown class.
+ * v1.2.0: NO implementation-hash or pi-version allowlist — this is a purely
+ * structural + ownership decision. Behavioral support is verified separately
+ * by the differential canary (canaryVerify in md-cache.js) inside setupMd().
  * @param {Function} Markdown pi-tui Markdown class
- * @param {string[]} allowlistHashes djb2 hex hashes of known-good
- *        Markdown.prototype.render implementations (from compatibility.json)
  * @returns {{decision: "install"|"adopt"|"unsupported"|"ownership-lost", reason?: string, hash?: string}}
  */
-export function evaluateMdSupport(Markdown, allowlistHashes) {
+export function evaluateMdSupport(Markdown) {
 	const shared = globalThis[MD_STATE_KEY];
 	const current = Markdown.prototype.render;
 	if (shared) {
@@ -103,15 +90,14 @@ export function evaluateMdSupport(Markdown, allowlistHashes) {
 	if (typeof current !== "function") {
 		return { decision: "unsupported", reason: "Markdown.prototype.render is not a function" };
 	}
-	const hash = hashString(current.toString());
-	if (Array.isArray(allowlistHashes) && allowlistHashes.includes(hash)) {
-		return { decision: "install", hash };
+	const desc = Object.getOwnPropertyDescriptor(Markdown.prototype, "render");
+	if (!desc || !desc.writable || !desc.configurable) {
+		return {
+			decision: "unsupported",
+			reason: "Markdown.prototype.render descriptor is not writable+configurable",
+		};
 	}
-	return {
-		decision: "unsupported",
-		reason: `unknown Markdown.render implementation (hash ${hash})`,
-		hash,
-	};
+	return { decision: "install", hash: hashString(current.toString()) };
 }
 
 /**
@@ -169,15 +155,24 @@ export function evaluateSegSupport() {
 
 /**
  * Evaluate + install md-cache and record the lifecycle state.
- * Never touches seg state.
- * @param {{Markdown: Function, getCapabilities?: Function, allowlistHashes: string[], budgetChars?: number}} deps
+ * Never touches seg state. Fresh installs run the behavioral differential
+ * canary (patched-vs-original byte equality on a representative corpus) using
+ * the host's markdown theme; adopt paths (post-/reload) skip the canary.
+ * @param {{Markdown: Function, getCapabilities?: Function, theme?: object|null, budgetChars?: number}} deps
  * @returns {{state: string, reason: string|null}}
  */
-export function setupMd({ Markdown, getCapabilities, allowlistHashes, budgetChars }) {
-	const ev = evaluateMdSupport(Markdown, allowlistHashes);
+export function setupMd({ Markdown, getCapabilities, theme, budgetChars }) {
+	const ev = evaluateMdSupport(Markdown);
 	if (ev.decision === "unsupported" || ev.decision === "ownership-lost") {
 		setState("md", ev.decision, ev.reason ?? null);
 		return getState("md");
+	}
+	if (ev.decision === "install") {
+		const canary = canaryVerify({ Markdown, getCapabilities, theme });
+		if (!canary.ok) {
+			setState("md", "unsupported", canary.reason ?? "differential canary failed");
+			return getState("md");
+		}
 	}
 	const res = installMd({ Markdown, getCapabilities, budgetChars });
 	if (res.installed) setState("md", "active", null);

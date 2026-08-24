@@ -8,21 +8,24 @@
  *     Intl.Segmenter.prototype.segment writable+configurable;
  *   - behavioral canaries: Markdown render returns non-empty string[];
  *     seg-cache patched-vs-pristine differential (byte-equal) on a tiny corpus;
- *   - exact pi/pi-tui compatibility-unit and implementation-hash gates.
+ *     md-cache differential canary (patched-vs-original byte equality with the
+ *     host's markdown theme, the SAME gate the runtime uses).
  *
- * Exit 0 only when the selected unit is structurally and exactly supported.
+ * Since v1.2.0 the pi version listing and implementation hashes in
+ * compatibility.json are DIAGNOSTIC ONLY — they are reported as INFO lines and
+ * never fail the check. Exit 0 is decided purely by the structural and
+ * behavioral gates above.
  *
  * Flags:
  *   --json               stdout is JSON ONLY (human output goes to stderr)
- *   --update-allowlist   write the observed implementation hashes for the
+ *   --update-allowlist   record the observed implementation hashes for the
  *                        selected pi version into compatibility.json
- *                        (populate command, run per supported version:
- *                         node scripts/check-upstream.mjs --update-allowlist)
+ *                        (diagnostic bookkeeping, not an activation gate)
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { hashString } from "../src/md-cache.js";
+import { canaryVerify, hashString } from "../src/md-cache.js";
 import { resolvePiRoot, resolvePiTui, resolveThemeModule } from "./resolve-pi.mjs";
 
 const PROJECT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -56,6 +59,12 @@ function check(name, ok, detail) {
 	report.checks.push({ name, ok, detail });
 	say(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 	return ok;
+}
+
+/** Diagnostic line: recorded in the report, never affects the exit code. */
+function info(name, detail) {
+	report.diagnostics.push({ name, detail });
+	say(`INFO  ${name}${detail ? ` — ${detail}` : ""}`);
 }
 
 let failed = false;
@@ -118,6 +127,18 @@ try {
 		failed |= !check("Markdown canary render(80) returns non-empty string[]", false, String(err));
 	}
 
+	// --- Behavioral canary: md-cache differential (the runtime activation gate) ---
+	try {
+		const mdCanary = canaryVerify({ Markdown, getCapabilities: tuiMod.getCapabilities, theme: mdTheme });
+		failed |= !check(
+			"md-cache differential canary byte-equal (miss+hit passes, cache active)",
+			mdCanary.ok,
+			mdCanary.ok ? undefined : mdCanary.reason,
+		);
+	} catch (err) {
+		failed |= !check("md-cache differential canary byte-equal (miss+hit passes, cache active)", false, String(err));
+	}
+
 	// --- Behavioral canary: seg-cache differential (patched vs pristine, byte-equal) ---
 	try {
 		const segCache = await import(pathToFileURL(path.join(PROJECT_ROOT, "src", "seg-cache.js")).href);
@@ -140,46 +161,31 @@ try {
 		failed |= !check("seg-cache differential canary byte-equal (miss+hit passes)", false, String(err));
 	}
 
-	// --- Exact compatibility-unit and implementation-hash gates ---
+	// --- Diagnostic compatibility-unit records (INFO only, never gate) ---
 	let compat = null;
 	try {
 		compat = JSON.parse(fs.readFileSync(COMPAT_PATH, "utf8"));
 	} catch {
-		failed |= !check("compatibility.json readable", false, COMPAT_PATH);
+		info("compatibility.json unreadable", COMPAT_PATH);
 	}
 	if (compat) {
 		const entry = compat.versions?.[pi.version];
-		failed |= !check(
-			`pi ${pi.version} listed in compatibility.json`,
-			!!entry,
-			entry ? `pi-tui expected ${entry.piTui}` : "unlisted version",
+		info(
+			`pi ${pi.version} ${entry ? "is" : "is NOT"} a recorded tested unit`,
+			entry ? `recorded pi-tui ${entry.piTui}, observed ${tui.version}` : "activation is behavioral; record with --update-allowlist",
 		);
-		if (entry) {
-			failed |= !check(
-				"pi-tui version matches compatibility entry",
-				entry.piTui === tui.version,
-				`expected ${entry.piTui}, got ${tui.version}`,
+		const recorded = compat.implementationHashes?.[pi.version];
+		if (recorded) {
+			const renderMatch = recorded.markdownRender === report.hashes.markdownRender.djb2;
+			const themeMatch =
+				!report.hashes.getMarkdownTheme || recorded.getMarkdownTheme === report.hashes.getMarkdownTheme.djb2;
+			info(
+				`implementation hashes ${renderMatch && themeMatch ? "match" : "DIFFER from"} the recorded unit`,
+				`render ${recorded.markdownRender}/${report.hashes.markdownRender.djb2}` +
+					(report.hashes.getMarkdownTheme
+						? `, theme ${recorded.getMarkdownTheme}/${report.hashes.getMarkdownTheme.djb2}`
+						: ""),
 			);
-			const allow = compat.implementationHashes?.[pi.version];
-			failed |= !check(
-				"implementation hash allowlist populated",
-				!!allow && Object.keys(allow).length > 0,
-				allow ? undefined : "empty — run: node scripts/check-upstream.mjs --update-allowlist",
-			);
-			if (allow && Object.keys(allow).length > 0) {
-				failed |= !check(
-					"Markdown.prototype.render hash matches allowlist",
-					allow.markdownRender === report.hashes.markdownRender.djb2,
-					`allowlist ${allow.markdownRender}, observed ${report.hashes.markdownRender.djb2}`,
-				);
-				if (report.hashes.getMarkdownTheme) {
-					failed |= !check(
-						"getMarkdownTheme hash matches allowlist",
-						allow.getMarkdownTheme === report.hashes.getMarkdownTheme.djb2,
-						`allowlist ${allow.getMarkdownTheme}, observed ${report.hashes.getMarkdownTheme.djb2}`,
-					);
-				}
-			}
 		}
 		if (UPDATE_ALLOWLIST) {
 			compat.implementationHashes ??= {};

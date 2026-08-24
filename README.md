@@ -62,7 +62,7 @@ Live `/rcstats` observations included seg-cache hit rates of 94–99.6% and md-c
 
 ### Correctness
 
-The current deterministic suite contains **85 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, configuration drift, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
+The current deterministic suite contains **88 tests** covering byte equality, lifecycle/ownership states, cache activity, eviction and cost bounds, theme/capability/width changes, styled fallback behavior, adversarial Markdown seams, differential-canary decisions, miss-time self-verification, configuration drift, and seeded fuzz. Performance ratios are intentionally outside correctness tests.
 
 ## Install
 
@@ -90,23 +90,24 @@ There is nothing to configure. Run:
 
 ## Compatibility
 
-md-cache compatibility is keyed by the `Markdown.prototype.render` implementation hash, not by the selected pi/pi-tui version. A future pi build that reuses a known-good Markdown renderer can activate automatically; an unknown renderer hash still fails closed until checked and allowlisted.
+Since v1.2.0 there is **no implementation-hash or pi-version allowlist**. Both patches decide support behaviorally at startup, on the real host prototypes:
+
+- **md-cache** runs a differential canary: it temporarily installs, renders a representative Markdown corpus through both the pristine original and the patched path (miss and hit passes) with the host's live theme, and requires byte equality plus actual cache activity. Any mismatch, throw, or zero-activity outcome → `unsupported`, nothing stays patched. At runtime, sampled miss-time self-verification re-checks stitched output against a full original render and permanently falls back for a theme that ever diverges.
+- **seg-cache** keeps its independent structural check (writable+configurable descriptor) and native-behavior canary.
 
 | pi | pi-tui | Node | md-cache | seg-cache |
 |---|---|---|---|---|
-| 0.80.7 | locked transitive 0.80.7 | `>=22.19.0` | active after canaries | active after canaries |
-| 0.82.1 | locked transitive 0.82.1 | `>=22.19.0` | active after canaries | active after canaries |
-| 0.84.1 | locked transitive 0.84.1 | `>=22.19.0` | active after canaries | active after canaries |
-| Other/future | resolved from selected pi | host-compatible | active when Markdown.render hash is known; otherwise unsupported | evaluated independently; active only if the native Segmenter canary passes |
+| 0.80.7 / 0.82.1 / 0.84.1 / 0.84.3 | locked transitive | `>=22.19.0` | active after canaries (tested units) | active after canaries |
+| Other/future | resolved from selected pi | host-compatible | active when the differential canary passes byte-equal with cache activity; otherwise unsupported | evaluated independently; active only if the native Segmenter canary passes |
 
-Unknown pi versions therefore do not cause an all-or-nothing shutdown: md-cache refuses unknown Markdown/theme implementations, while seg-cache can remain active if its independent structural and differential checks pass.
+A future pi release that changes the Markdown renderer or theme surface therefore activates automatically when the behavioral contract still holds, and fails closed per patch when it does not — no allowlist update or extension release required. `compatibility.json` remains as a diagnostic record of tested units.
 
 ## Safety
 
 - **Independent lifecycle.** Compatibility failure in one patch does not uninstall or misreport the other. Counters are observability only, not self-disable triggers.
 - **Ownership-safe reloads.** Shared symbol state permits adoption across `/reload`; uninstall restores an original only while the extension still owns the method. Foreign wrappers produce `ownership-lost`, never wrapper layering.
 - **Conservative Markdown scope.** Non-null `defaultTextStyle`, non-empty options, unsafe split boundaries, non-matching themes, throws, and oversized fingerprint outputs use the untouched original renderer.
-- **Hardened supported-theme key.** The complete renderer-consumed theme surface, capabilities, render inputs, and implementation identity are length-framed and fingerprinted. Source signatures are compatibility gates, not authentication; matching callbacks must be deterministic, side-effect-free, and input-transparent.
+- **Contractual theme acceptance + self-verification.** A cacheable theme must expose exactly the MarkdownTheme callback surface; every consumed output is probed twice per render (determinism) and length-framed into the cache key. Sampled cache fills are additionally byte-compared against a full original render; a theme that ever diverges is permanently blacklisted for the session. Matching callbacks must be deterministic, side-effect-free, and input-transparent — spoofed or stateful callbacks are unsupported-by-design.
 - **Bounded storage.** Both caches account conservatively for retained keys and values, enforce per-entry and total limits, and skip entries that exceed them.
 
 ## Verification
@@ -120,7 +121,7 @@ npm run compat
 The benchmark engine and test fixtures are repository tooling, not included in the npm tarball. From a source checkout:
 
 ```bash
-npm run verify          # 85 tests, typecheck, selected-unit compat, exact pack manifest
+npm run verify          # 88 tests, typecheck, selected-unit compat, exact pack manifest
 npm run compat:matrix   # locked pi 0.80.7, 0.82.1, and 0.84.1 fixtures
 npm run premise         # full 20-block controlled replay and evaluator
 npm run test:perf       # short 3-block maintainer check; not release evidence
@@ -141,7 +142,7 @@ See [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md) for exact source links,
 
 - **Styled thinking is deliberately not md-cached.** Its non-null text style forces the original Markdown renderer; this unchanged behavior is now enforced and tested. seg-cache remains active and measured about 1.5× in controlled thinking replay.
 - md-cache mainly helps models that stream many small chunks. Large, infrequent chunks receive proportionally more benefit from seg-cache.
-- Matching core-signature theme callbacks are supported only when deterministic, side-effect-free, and input-transparent. Deliberately spoofed or stateful callbacks are unsupported.
+- Theme callbacks are supported only when deterministic, side-effect-free, and input-transparent. Deliberately spoofed or stateful callbacks are unsupported; the sampled miss-time differential catches divergence at the first verified fill and falls back permanently.
 - Retained-cost figures are conservative estimates, not measured heap-byte guarantees. For backward compatibility, the legacy 2,000,000-unit setting is scaled to effective budgets of 8,000,000 units for md-cache and 16,000,000 for seg-cache; per-entry limits remain one quarter of each total.
 - Each patch remains a stopgap and is retired independently only after a released upstream version passes the documented structural-no-work or statistical-equivalence route.
 
