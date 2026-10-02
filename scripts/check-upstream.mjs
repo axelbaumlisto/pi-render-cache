@@ -61,6 +61,18 @@ function check(name, ok, detail) {
 	return ok;
 }
 
+/** Numeric-segment semver compare; prerelease tags are ignored (diagnostic use only). */
+function compareVersions(a, b) {
+	const parse = (v) => String(v).split("-")[0].split(".").map((part) => Number.parseInt(part, 10) || 0);
+	const left = parse(a);
+	const right = parse(b);
+	for (let i = 0; i < Math.max(left.length, right.length); i++) {
+		const diff = (left[i] ?? 0) - (right[i] ?? 0);
+		if (diff !== 0) return diff < 0 ? -1 : 1;
+	}
+	return 0;
+}
+
 /** Diagnostic line: recorded in the report, never affects the exit code. */
 function info(name, detail) {
 	report.diagnostics.push({ name, detail });
@@ -169,11 +181,20 @@ try {
 		info("compatibility.json unreadable", COMPAT_PATH);
 	}
 	if (compat) {
+		// Support is a RANGE plus behavioral verification, not a list of exact units:
+		// a pi build nobody recorded is still supported when the canaries above pass.
+		const minimum = compat.supported?.pi;
+		if (minimum) {
+			const atLeast = compareVersions(pi.version, minimum.replace(/^>=/, "")) >= 0;
+			info(
+				`pi ${pi.version} is ${atLeast ? "within" : "below"} the declared supported range ${minimum}`,
+				atLeast
+					? "activation is behavioral; no per-version recording required"
+					: "older than the target line; activation is still behavioral and falls back when a surface differs",
+			);
+		}
 		const entry = compat.versions?.[pi.version];
-		info(
-			`pi ${pi.version} ${entry ? "is" : "is NOT"} a recorded tested unit`,
-			entry ? `recorded pi-tui ${entry.piTui}, observed ${tui.version}` : "activation is behavioral; record with --update-allowlist",
-		);
+		if (entry) info(`pi ${pi.version} has a measured history entry`, `recorded pi-tui ${entry.piTui}, observed ${tui.version}`);
 		const recorded = compat.implementationHashes?.[pi.version];
 		if (recorded) {
 			const renderMatch = recorded.markdownRender === report.hashes.markdownRender.djb2;

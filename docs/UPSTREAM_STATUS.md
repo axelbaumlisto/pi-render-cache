@@ -1,5 +1,14 @@
 # Upstream status and release evidence
 
+## Supported pi line (v1.2.2)
+
+`compatibility.json` declares `supported.pi: ">=1.0.0"`. Support is that range plus the install-time behavioral
+verification, **not** a list of exact versions: a pi build that nobody recorded is still supported when the canaries
+pass, and an older or diverging build is not blocked — it takes the same behavioral path and falls back to the
+original renderer per patch. The repository's own devDependencies now follow the current pi line (1.0.0) instead of a
+frozen 0.84.1 unit, so `npm test` exercises what users actually run. `versions` / `implementationHashes` remain a
+history of measured units, useful for reproducing a past measurement.
+
 ## pi 1.0.0 re-check (2026-10-02, v1.2.1)
 
 Both upstream premises still hold on released pi **1.0.0**:

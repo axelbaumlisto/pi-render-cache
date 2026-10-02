@@ -1,5 +1,9 @@
 {
-	"$comment": "DIAGNOSTIC RECORD ONLY (since v1.2.0). Nothing here gates activation: md-cache activates via a runtime behavioral differential canary (patched-vs-original byte equality on the real host prototypes) plus sampled miss-time self-verification, and seg-cache via its independent structural+native canaries. versions and implementationHashes record tested pi/pi-tui units and observed djb2 hex hashes of Markdown.prototype.render.toString() / getMarkdownTheme.toString() for reproducibility; refresh with: PI_PACKAGE_ROOT=<fixture-root> node scripts/check-upstream.mjs --update-allowlist.",
+	"$comment": "DIAGNOSTIC RECORD ONLY (since v1.2.0). Nothing here gates activation: md-cache activates via a runtime behavioral differential canary (patched-vs-original byte equality on the real host prototypes) plus sampled miss-time self-verification, and seg-cache via its independent structural+native canaries. `supported` declares the pi line this release targets; `versions`/`implementationHashes` are a HISTORY of units that were measured, not an allowlist \u2014 a pi build absent from them is neither blocked nor degraded. Refresh history with: PI_PACKAGE_ROOT=<fixture-root> node scripts/check-upstream.mjs --update-allowlist.",
+	"supported": {
+		"pi": ">=1.0.0",
+		"$comment": "The extension patches two stable prototype surfaces and verifies both behaviorally at install time, so any pi at or above this minimum is supported without recording its exact version here. Older pi builds are not rejected either: they take the same behavioral path and fall back to the original renderer when a surface differs."
+	},
 	"node": ">=22.19.0",
 	"versions": {
 		"0.80.7": {
