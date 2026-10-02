@@ -47,6 +47,10 @@
 		"0.84.3": {
 			"markdownRender": "cea3fb87",
 			"getMarkdownTheme": "b8b6a5a8"
+		},
+		"1.0.0": {
+			"markdownRender": "3fcc8f4e",
+			"getMarkdownTheme": "7e3dd58"
 		}
 	},
 	"cacheBudgetCalibration": {

@@ -1,5 +1,35 @@
 # Upstream status and release evidence
 
+## pi 1.0.0 re-check (2026-10-02, v1.2.1)
+
+Both upstream premises still hold on released pi **1.0.0**:
+
+- `AssistantMessageComponent.updateContent()` still calls `contentContainer.clear()` and constructs a fresh
+  `Markdown` per streamed assistant update, so the component's per-instance line cache is still discarded.
+- pi-tui still creates shared `Intl.Segmenter` instances and calls `segment()` on the visible-width path. The new
+  `widthCache` in pi-tui memoizes whole-string widths only, so repeated segmentation of changing strings remains.
+
+Measured on pi 1.0.0 (Apple M3, Node 22.23.0, 3 randomized blocks, report-only):
+
+| Workload | seg-cache | md-cache | both |
+|---|---:|---:|---:|
+| Ordinary streaming Markdown | 1.19× | 10.31× | **13.41×** (retained 70.0 → 4.4 MiB) |
+| Styled thinking | 1.66× | 0.87× (fallback by design) | **1.51×** |
+| Unicode visible-width work | 2.92× | 1.01× | **2.88×** |
+
+### Fixed in v1.2.1: syntax palette went unobserved on pi 1.0.0
+
+`highlightCode` falls back to one flat `mdCodeBlock` color whenever `supportsLanguage(lang)` is false. pi 1.0.0's
+bundled highlighter no longer recognizes `llvm`, which was the single language the theme fingerprint probed, so the
+fingerprint stopped observing every syntax color: after a `/theme` switch, cached settled prefixes kept the OLD
+syntax colors. The fingerprint now probes five recognized languages (typescript, html, sql, python, swift) that
+together cover comment, keyword, function, variable, string, number, type and operator. No highlight.js scope
+resolves to `syntaxPunctuation` on this host, so that color cannot appear in rendered output either.
+
+The repository's own theme-invalidation tests could not catch this: they recolored a cloned theme's `fgColors`,
+which pi 1.0.0 no longer reads at `fg()` time (it precomputes `fgAnsi` in the Theme constructor), so the switch was
+a no-op and the tests failed on their own sanity assertion. `tests/helpers.js` now writes every representation.
+
 Checked **2026-08-07** against released pi **0.84.1**, commit [`53fa77ccd8a279eb87e92294ef3687b03ff80112`](https://github.com/earendil-works/pi/tree/53fa77ccd8a279eb87e92294ef3687b03ff80112), and newer upstream `main` commit [`4bf1bba203c699a0b79da669b084052c72b7a35a`](https://github.com/earendil-works/pi/tree/4bf1bba203c699a0b79da669b084052c72b7a35a). No intervening commit touches the four hot-path files, and both targets from #6665 remain present:
 
 - [`AssistantMessageComponent.updateContent()` still clears its container](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L89-L95) and [constructs a fresh `Markdown`](https://github.com/earendil-works/pi/blob/4bf1bba203c699a0b79da669b084052c72b7a35a/packages/coding-agent/src/modes/interactive/components/assistant-message.ts#L104-L116) for streamed assistant text.

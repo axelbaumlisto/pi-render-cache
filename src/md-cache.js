@@ -143,17 +143,20 @@ function themeFingerprint(theme) {
 		["italic", ["i"]],
 		["underline", ["u"]],
 		["strikethrough", ["s"]],
-		// This recognized LLVM probe empirically exercises every palette mapping
-		// consumed by getCliHighlightTheme: comment, keyword, function, variable,
-		// string, number, type, operator, and punctuation.
-		[
-			"highlightCode",
-			[
-				';c\ndefine i8 @f(i8 %x){%v=add i8 %x,1}\n@x=c"s"',
-				"llvm",
-			],
-			true,
-		],
+		// Syntax palette probes. highlightCode falls back to a single flat
+		// mdCodeBlock color whenever supportsLanguage(lang) is false, so a probe
+		// language the host's highlighter does not recognize observes NOTHING:
+		// pi 1.0.0 dropped llvm, and the former single llvm probe stopped seeing
+		// every syntax color, leaving code blocks cached across a /theme switch.
+		// These five recognized languages together observe comment, keyword,
+		// function, variable, string, number, type and operator.
+		// `punctuation` has no reachable highlight.js scope in this host, so it
+		// cannot appear in rendered output either.
+		["highlightCode", ['// c\nclass K { m(p: number): string { return "s" + f(p ?? 1); } }', "typescript"], true],
+		["highlightCode", ['<!-- c --><div class="x" id=\'y\'>t</div>', "html"], true],
+		["highlightCode", ["SELECT a + 1 FROM t WHERE id = 42;", "sql"], true],
+		["highlightCode", ['# c\ndef f(x=1):\n    return "s" % x', "python"], true],
+		["highlightCode", ['func f(a: Int) -> Int { let s = "x"; return a + 1 }', "swift"], true],
 	];
 	const components = [];
 	let total = 0;
@@ -163,9 +166,10 @@ function themeFingerprint(theme) {
 		if (first === null || second === null || first !== second || first.length > MAX_THEME_COMPONENT_CHARS) {
 			return null;
 		}
-		total += name.length + first.length;
+		const label = name === "highlightCode" ? `${name}:${args[1]}` : name;
+		total += label.length + first.length;
 		if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
-		components.push(name, first);
+		components.push(label, first);
 	}
 	const indent = theme.codeBlockIndent ?? "";
 	if (typeof indent !== "string" || indent.length > MAX_THEME_COMPONENT_CHARS) return null;
