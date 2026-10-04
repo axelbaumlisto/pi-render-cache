@@ -48,7 +48,32 @@ The v1.1.1 release replay used Apple M3, Node 22.23.0, pi/pi-tui 0.84.1, and 20 
 
 Every replay cut point was byte-identical. The sanitized evidence, memory deltas, environment, and hashes are in [`evidence/v1.1.1/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.1/evidence/v1.1.1/summary.json); methodology and upstream state are in [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md). From a source checkout, reproduce the release workload with `npm run premise`.
 
-### Live-session observations: pi 0.80.7, 2026-07
+### Live session, measured through pi itself: pi 1.0.2, 2026-10
+
+Every number above it comes from a replay harness that imports the TUI package
+and measures the patched prototype. That is a measurement of the patch, not of
+pi — and it is why this extension could spend six weeks patching a copy of the
+renderer that pi had stopped loading without a single check going red.
+
+This one drives a real pi in a pty at 50x160, resuming a real 223 MB session,
+and times `Markdown.prototype.render` on the module the process actually runs.
+Both arms rendered byte-identical work: 180 calls over 50,485 characters.
+
+| Arm | Run 1 | Run 2 | Per 1,000 chars |
+|---|---:|---:|---:|
+| Without the extension | 52.9 ms | 50.9 ms | 1.03 ms |
+| With the extension | 24.8 ms | 21.0 ms | 0.46 ms |
+
+So 2.2x on the render path of a heavy session — well short of the replay's 16x,
+because that figure describes the worst case this cache was built for: a stream
+arriving in small chunks, where the host re-renders the whole message per chunk.
+Resuming a transcript renders each message once or twice. Both numbers are real;
+they answer different questions.
+
+`npm run verify:live` is the check that enforces the distinction — it fails when
+the renderer never calls the patch.
+
+### Earlier live-session observations: pi 0.80.7, 2026-07
 
 These Apple M3 / Node 22.23 observations are ecological checks, not controlled benchmark evidence. Model/network timing and session content were not used for the release ratios above.
 
