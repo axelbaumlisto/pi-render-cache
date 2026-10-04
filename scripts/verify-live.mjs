@@ -23,10 +23,13 @@ import path from "node:path";
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
-	const i = args.indexOf(`--${name}`);
-	return i === -1 ? fallback : args[i + 1];
+  const i = args.indexOf(`--${name}`);
+  return i === -1 ? fallback : args[i + 1];
 };
-const PROMPT = flag("prompt", "Напиши три абзаца про кэширование, со списком и **жирным**");
+const PROMPT = flag(
+  "prompt",
+  "Напиши три абзаца про кэширование, со списком и **жирным**",
+);
 const SECONDS = Number(flag("seconds", 40));
 const SESSION = flag("session", null);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-live-"));
@@ -34,21 +37,23 @@ const log = path.join(dir, "calls.log");
 const probe = path.join(dir, "probe.ts");
 
 const piBin = (() => {
-	try {
-		return fs.realpathSync(execFileSync("sh", ["-lc", "command -v pi"], { encoding: "utf8" }).trim());
-	} catch {
-		return null;
-	}
+  try {
+    return fs.realpathSync(
+      execFileSync("sh", ["-lc", "command -v pi"], { encoding: "utf8" }).trim(),
+    );
+  } catch {
+    return null;
+  }
 })();
 if (!piBin) {
-	console.error("pi не найден в PATH — живую проверку выполнить нельзя");
-	process.exit(2);
+  console.error("pi не найден в PATH — живую проверку выполнить нельзя");
+  process.exit(2);
 }
 const piRoot = piBin.replace(/\/dist\/.*$/, "");
 
 fs.writeFileSync(
-	probe,
-	`import * as fs from "fs";
+  probe,
+  `import * as fs from "fs";
 import { resolveLiveTuiModule, resolvePiRoot } from ${JSON.stringify(path.resolve("scripts/resolve-pi.mjs"))};
 export default async function () {
 	try {
@@ -78,31 +83,44 @@ export default async function () {
 // broken patch can still look busy.
 const runner = path.join(dir, "run.sh");
 const sessionArg = SESSION ? ` --session ${JSON.stringify(SESSION)}` : "";
-fs.writeFileSync(runner, `stty rows 50 cols 160 2>/dev/null\nexec "${piBin}"${sessionArg} -e "${probe}"\n`);
+fs.writeFileSync(
+  runner,
+  `stty rows 50 cols 160 2>/dev/null\nexec "${piBin}"${sessionArg} -e "${probe}"\n`,
+);
 
 const driver = `printf '%s\\n' ${JSON.stringify(PROMPT)}; sleep ${SECONDS}; printf '\\003'; sleep 1; printf '\\003'; sleep 1`;
-spawnSync("sh", ["-lc", `(${driver}) | script -q /dev/null sh ${runner} > /dev/null 2>&1`], {
-	timeout: (SECONDS + 30) * 1000,
-});
+spawnSync(
+  "sh",
+  ["-lc", `(${driver}) | script -q /dev/null sh ${runner} > /dev/null 2>&1`],
+  {
+    timeout: (SECONDS + 30) * 1000,
+  },
+);
 
 let result = {};
 try {
-	result = JSON.parse(fs.readFileSync(log, "utf8"));
+  result = JSON.parse(fs.readFileSync(log, "utf8"));
 } catch {
-	console.error("проба ничего не записала — сессия не запустилась");
-	process.exit(1);
+  console.error("проба ничего не записала — сессия не запустилась");
+  process.exit(1);
 }
 fs.rmSync(dir, { recursive: true, force: true });
 
 if (result.error) {
-	console.error(`проба не смогла пропатчить рендерер: ${result.error}`);
-	process.exit(1);
+  console.error(`проба не смогла пропатчить рендерер: ${result.error}`);
+  process.exit(1);
 }
-console.log(`режим: ${SESSION ? "возобновление сессии" : "новая сессия с потоком ответа"}`);
+console.log(
+  `режим: ${SESSION ? "возобновление сессии" : "новая сессия с потоком ответа"}`,
+);
 console.log(`патч стоит на: ${result.where}`);
-console.log(`вызовов из pi: ${result.calls} | из собственной самопроверки: ${result.self ?? 0}`);
+console.log(
+  `вызовов из pi: ${result.calls} | из собственной самопроверки: ${result.self ?? 0}`,
+);
 if (!result.calls) {
-	console.error("НОЛЬ вызовов из pi — этот путь отрисовки хозяин не использует");
-	process.exit(1);
+  console.error(
+    "НОЛЬ вызовов из pi — этот путь отрисовки хозяин не использует",
+  );
+  process.exit(1);
 }
 console.log("PASS: pi действительно зовёт пропатченный рендер");

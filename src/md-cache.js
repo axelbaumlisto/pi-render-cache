@@ -51,56 +51,66 @@ const THEME_SIGNATURE_CACHE = new WeakMap();
 // A theme must expose exactly these own keys (plus optionally codeBlockIndent)
 // to be cacheable; anything else falls back to the original renderer.
 export const CORE_THEME_KEYS = Object.freeze(
-	[
-		"bold",
-		"code",
-		"codeBlock",
-		"codeBlockBorder",
-		"heading",
-		"highlightCode",
-		"hr",
-		"italic",
-		"link",
-		"linkUrl",
-		"listBullet",
-		"quote",
-		"quoteBorder",
-		"strikethrough",
-		"underline",
-	].sort(),
+  [
+    "bold",
+    "code",
+    "codeBlock",
+    "codeBlockBorder",
+    "heading",
+    "highlightCode",
+    "hr",
+    "italic",
+    "link",
+    "linkUrl",
+    "listBullet",
+    "quote",
+    "quoteBorder",
+    "strikethrough",
+    "underline",
+  ].sort(),
 );
 
 /** djb2 hash → hex string; used for compact compatibility/cache identities. */
 /**
- * A stable id for an options value, so two different transforms cannot collide
- * in the cache. Identity only — a transform is never inspected or called here.
+ * A stable id for an options value.
+ *
+ * pi builds a fresh transform closure per message from one factory: a resumed
+ * session showed 72 renders carrying 69 distinct transform objects and exactly
+ * one distinct source. Keying by object identity therefore produced a unique
+ * key every time and the cache never hit once. Functions are keyed by source,
+ * which two closures from the same factory share; everything else keeps object
+ * identity. Source equality is an assumption about captured state, so hits are
+ * sampled against a full original render and a source that ever disagrees is
+ * never cached again.
  */
 const identities = new WeakMap();
 let nextIdentity = 0;
 export function identify(value) {
-	let id = identities.get(value);
-	if (id === undefined) {
-		id = `t${++nextIdentity}`;
-		identities.set(value, id);
-	}
-	return id;
+  if (typeof value === "function") return `s${hashString(String(value))}`;
+  let id = identities.get(value);
+  if (id === undefined) {
+    id = `t${++nextIdentity}`;
+    identities.set(value, id);
+  }
+  return id;
 }
 
 /** Why a render went to the original — a bare count cannot be acted on. */
 function fallback(counters, reason) {
-	counters.fallbacks++;
-	counters.reasons[reason] = (counters.reasons[reason] ?? 0) + 1;
+  counters.fallbacks++;
+  counters.reasons[reason] = (counters.reasons[reason] ?? 0) + 1;
 }
 
 export function hashString(str) {
-	let h = 5381;
-	for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-	return h.toString(16);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++)
+    h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h.toString(16);
 }
 
 /** Length-frame arbitrary string parts; embedded NULs cannot collide. */
 function frameParts(parts) {
-	return parts.map((part) => `${part.length}\0${part}`).join("\0");
+  return parts.map((part) => `${part.length}\0${part}`).join("\0");
 }
 
 /**
@@ -112,35 +122,45 @@ function frameParts(parts) {
  * Returns a compact identity for the accepted raw/wrapped shape.
  */
 function themeSignature(theme) {
-	const memoized = THEME_SIGNATURE_CACHE.get(theme);
-	if (memoized !== undefined) return memoized;
+  const memoized = THEME_SIGNATURE_CACHE.get(theme);
+  if (memoized !== undefined) return memoized;
 
-	const keys = Reflect.ownKeys(theme);
-	if (keys.some((key) => typeof key !== "string")) return null;
-	keys.sort();
-	const hasIndent = keys.includes("codeBlockIndent");
-	const expectedKeys = hasIndent ? [...CORE_THEME_KEYS, "codeBlockIndent"].sort() : CORE_THEME_KEYS;
-	if (keys.length !== expectedKeys.length || keys.some((key, i) => key !== expectedKeys[i])) return null;
-	if (hasIndent && typeof theme.codeBlockIndent !== "string") return null;
-	for (const key of CORE_THEME_KEYS) {
-		if (typeof theme[key] !== "function") return null;
-	}
-	const signatureHash = hashString(frameParts(["shape-v2", ...keys, hasIndent ? "indent" : ""]));
-	THEME_SIGNATURE_CACHE.set(theme, signatureHash);
-	return signatureHash;
+  const keys = Reflect.ownKeys(theme);
+  if (keys.some((key) => typeof key !== "string")) return null;
+  keys.sort();
+  const hasIndent = keys.includes("codeBlockIndent");
+  const expectedKeys = hasIndent
+    ? [...CORE_THEME_KEYS, "codeBlockIndent"].sort()
+    : CORE_THEME_KEYS;
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, i) => key !== expectedKeys[i])
+  )
+    return null;
+  if (hasIndent && typeof theme.codeBlockIndent !== "string") return null;
+  for (const key of CORE_THEME_KEYS) {
+    if (typeof theme[key] !== "function") return null;
+  }
+  const signatureHash = hashString(
+    frameParts(["shape-v2", ...keys, hasIndent ? "indent" : ""]),
+  );
+  THEME_SIGNATURE_CACHE.set(theme, signatureHash);
+  return signatureHash;
 }
 
 /** Element-wise strict equality of two string arrays. */
 function linesEqual(a, b) {
-	if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-	return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+    return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 function normalizeThemeOutput(value, arrayExpected = false) {
-	if (!arrayExpected) return typeof value === "string" ? value : null;
-	if (!Array.isArray(value) || value.some((line) => typeof line !== "string")) return null;
-	return frameParts(value);
+  if (!arrayExpected) return typeof value === "string" ? value : null;
+  if (!Array.isArray(value) || value.some((line) => typeof line !== "string"))
+    return null;
+  return frameParts(value);
 }
 
 /**
@@ -149,55 +169,76 @@ function normalizeThemeOutput(value, arrayExpected = false) {
  * cache path. This runs only after source-signature compatibility succeeds.
  */
 function themeFingerprint(theme) {
-	const probes = [
-		["heading", ["H"]],
-		["link", ["L"]],
-		["linkUrl", ["https://x"]],
-		["code", ["c"]],
-		["codeBlock", ["b"]],
-		["codeBlockBorder", ["|"]],
-		["quote", ["q"]],
-		["quoteBorder", [">"]],
-		["hr", ["-"]],
-		["listBullet", ["*"]],
-		["bold", ["b"]],
-		["italic", ["i"]],
-		["underline", ["u"]],
-		["strikethrough", ["s"]],
-		// Syntax palette probes. highlightCode falls back to a single flat
-		// mdCodeBlock color whenever supportsLanguage(lang) is false, so a probe
-		// language the host's highlighter does not recognize observes NOTHING:
-		// pi 1.0.0 dropped llvm, and the former single llvm probe stopped seeing
-		// every syntax color, leaving code blocks cached across a /theme switch.
-		// These five recognized languages together observe comment, keyword,
-		// function, variable, string, number, type and operator.
-		// `punctuation` has no reachable highlight.js scope in this host, so it
-		// cannot appear in rendered output either.
-		["highlightCode", ['// c\nclass K { m(p: number): string { return "s" + f(p ?? 1); } }', "typescript"], true],
-		["highlightCode", ['<!-- c --><div class="x" id=\'y\'>t</div>', "html"], true],
-		["highlightCode", ["SELECT a + 1 FROM t WHERE id = 42;", "sql"], true],
-		["highlightCode", ['# c\ndef f(x=1):\n    return "s" % x', "python"], true],
-		["highlightCode", ['func f(a: Int) -> Int { let s = "x"; return a + 1 }', "swift"], true],
-	];
-	const components = [];
-	let total = 0;
-	for (const [name, args, arrayExpected = false] of probes) {
-		const first = normalizeThemeOutput(theme[name](...args), arrayExpected);
-		const second = normalizeThemeOutput(theme[name](...args), arrayExpected);
-		if (first === null || second === null || first !== second || first.length > MAX_THEME_COMPONENT_CHARS) {
-			return null;
-		}
-		const label = name === "highlightCode" ? `${name}:${args[1]}` : name;
-		total += label.length + first.length;
-		if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
-		components.push(label, first);
-	}
-	const indent = theme.codeBlockIndent ?? "";
-	if (typeof indent !== "string" || indent.length > MAX_THEME_COMPONENT_CHARS) return null;
-	total += "codeBlockIndent".length + indent.length;
-	if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
-	components.push("codeBlockIndent", indent);
-	return hashString(frameParts(components));
+  const probes = [
+    ["heading", ["H"]],
+    ["link", ["L"]],
+    ["linkUrl", ["https://x"]],
+    ["code", ["c"]],
+    ["codeBlock", ["b"]],
+    ["codeBlockBorder", ["|"]],
+    ["quote", ["q"]],
+    ["quoteBorder", [">"]],
+    ["hr", ["-"]],
+    ["listBullet", ["*"]],
+    ["bold", ["b"]],
+    ["italic", ["i"]],
+    ["underline", ["u"]],
+    ["strikethrough", ["s"]],
+    // Syntax palette probes. highlightCode falls back to a single flat
+    // mdCodeBlock color whenever supportsLanguage(lang) is false, so a probe
+    // language the host's highlighter does not recognize observes NOTHING:
+    // pi 1.0.0 dropped llvm, and the former single llvm probe stopped seeing
+    // every syntax color, leaving code blocks cached across a /theme switch.
+    // These five recognized languages together observe comment, keyword,
+    // function, variable, string, number, type and operator.
+    // `punctuation` has no reachable highlight.js scope in this host, so it
+    // cannot appear in rendered output either.
+    [
+      "highlightCode",
+      [
+        '// c\nclass K { m(p: number): string { return "s" + f(p ?? 1); } }',
+        "typescript",
+      ],
+      true,
+    ],
+    [
+      "highlightCode",
+      ["<!-- c --><div class=\"x\" id='y'>t</div>", "html"],
+      true,
+    ],
+    ["highlightCode", ["SELECT a + 1 FROM t WHERE id = 42;", "sql"], true],
+    ["highlightCode", ['# c\ndef f(x=1):\n    return "s" % x', "python"], true],
+    [
+      "highlightCode",
+      ['func f(a: Int) -> Int { let s = "x"; return a + 1 }', "swift"],
+      true,
+    ],
+  ];
+  const components = [];
+  let total = 0;
+  for (const [name, args, arrayExpected = false] of probes) {
+    const first = normalizeThemeOutput(theme[name](...args), arrayExpected);
+    const second = normalizeThemeOutput(theme[name](...args), arrayExpected);
+    if (
+      first === null ||
+      second === null ||
+      first !== second ||
+      first.length > MAX_THEME_COMPONENT_CHARS
+    ) {
+      return null;
+    }
+    const label = name === "highlightCode" ? `${name}:${args[1]}` : name;
+    total += label.length + first.length;
+    if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
+    components.push(label, first);
+  }
+  const indent = theme.codeBlockIndent ?? "";
+  if (typeof indent !== "string" || indent.length > MAX_THEME_COMPONENT_CHARS)
+    return null;
+  total += "codeBlockIndent".length + indent.length;
+  if (total > MAX_THEME_FINGERPRINT_CHARS) return null;
+  components.push("codeBlockIndent", indent);
+  return hashString(frameParts(components));
 }
 
 /**
@@ -207,153 +248,211 @@ function themeFingerprint(theme) {
  * with ≥4 spaces after tab expansion → fallback (found by the fuzz gate).
  */
 function endsWithIndentedCode(settled) {
-	const lastNl = settled.lastIndexOf("\n", settled.length - 2);
-	const lastLine = settled.slice(lastNl + 1).replace(/\t/g, "   ");
-	return /^ {4}/.test(lastLine);
+  const lastNl = settled.lastIndexOf("\n", settled.length - 2);
+  const lastLine = settled.slice(lastNl + 1).replace(/\t/g, "   ");
+  return /^ {4}/.test(lastLine);
 }
 
 // Miss-time differential sampling: verify the first fills and then every
 // VERIFY_SAMPLE_EVERY-th fill against a full original render. Cheap relative
 // to the miss itself and catches renderer/theme drift without any allowlist.
+/** Transform sources whose sampled verification disagreed with the original. */
+const blacklistedSources = new Set();
 const VERIFY_FIRST_FILLS = 2;
 const VERIFY_SAMPLE_EVERY = 32;
 
 function makePatchedRender(state) {
-	const { orig, cache, counters, Markdown, getCaps, blacklist } = state;
-	return function render(width) {
-		// (a) Preserve the original O(1) per-instance second-call path
-		// (Container/overlay call render twice per frame).
-		if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
-			return this.cachedLines;
-		}
-		// (b) Non-cacheable configurations → orig entirely.
-		if (typeof this.text !== "string" || this.paddingY > 0 || this.defaultTextStyle != null) {
-			fallback(counters, "styled-or-padded");
-			return orig.call(this, width);
-		}
-		// pi 1.0.x hands every assistant message a transform in options, which
-		// used to send every render here to the original — the cache stored
-		// nothing at all. A transform is carried through to the scratch
-		// instances and folded into the key by identity, so two different
-		// transforms can never share an entry. Anything else in options is
-		// still unknown, and unknown means fall back.
-		const optionKeys = this.options == null ? [] : Object.keys(this.options);
-		if (optionKeys.some((k) => k !== "transform")) {
-			fallback(counters, "unknown-option");
-			return orig.call(this, width);
-		}
-		const transform = this.options?.transform;
-		if (transform !== undefined && typeof transform !== "function" && typeof transform !== "object") {
-			fallback(counters, "exotic-transform");
-			return orig.call(this, width);
-		}
-		const transformId = transform === undefined ? "" : identify(transform);
-		// (g-pre) Empty/whitespace text: orig handles []-semantics + instance cache.
-		if (!this.text || this.text.trim() === "") return orig.call(this, width);
-		// (b2) Theme failed a previous differential self-verification → orig forever.
-		if (this.theme !== null && typeof this.theme === "object" && blacklist.has(this.theme)) {
-			fallback(counters, "blacklisted-theme");
-			return orig.call(this, width);
-		}
+  const { orig, cache, counters, Markdown, getCaps, blacklist } = state;
+  return function render(width) {
+    // (a) Preserve the original O(1) per-instance second-call path
+    // (Container/overlay call render twice per frame).
+    if (
+      this.cachedLines &&
+      this.cachedText === this.text &&
+      this.cachedWidth === width
+    ) {
+      return this.cachedLines;
+    }
+    // (b) Non-cacheable configurations → orig entirely.
+    if (
+      typeof this.text !== "string" ||
+      this.paddingY > 0 ||
+      this.defaultTextStyle != null
+    ) {
+      fallback(counters, "styled-or-padded");
+      return orig.call(this, width);
+    }
+    // pi 1.0.x hands every assistant message a transform in options, which
+    // used to send every render here to the original — the cache stored
+    // nothing at all. A transform is carried through to the scratch
+    // instances and folded into the key by identity, so two different
+    // transforms can never share an entry. Anything else in options is
+    // still unknown, and unknown means fall back.
+    const optionKeys = this.options == null ? [] : Object.keys(this.options);
+    if (optionKeys.some((k) => k !== "transform")) {
+      fallback(counters, "unknown-option");
+      return orig.call(this, width);
+    }
+    const transform = this.options?.transform;
+    if (
+      transform !== undefined &&
+      typeof transform !== "function" &&
+      typeof transform !== "object"
+    ) {
+      fallback(counters, "exotic-transform");
+      return orig.call(this, width);
+    }
+    const transformId = transform === undefined ? "" : identify(transform);
+    if (blacklistedSources.has(transformId)) {
+      fallback(counters, "blacklisted-source");
+      return orig.call(this, width);
+    }
+    // (g-pre) Empty/whitespace text: orig handles []-semantics + instance cache.
+    if (!this.text || this.text.trim() === "") return orig.call(this, width);
+    // (b2) Theme failed a previous differential self-verification → orig forever.
+    if (
+      this.theme !== null &&
+      typeof this.theme === "object" &&
+      blacklist.has(this.theme)
+    ) {
+      fallback(counters, "blacklisted-theme");
+      return orig.call(this, width);
+    }
 
-		let key;
-		let wholeKey;
-		let settled;
-		let tail;
-		try {
-			// (d) Gate callback compatibility before bounded output probing.
-			const signatureHash = themeSignature(this.theme);
-			if (signatureHash === null) {
-				fallback(counters, "callback-signature");
-				return orig.call(this, width);
-			}
-			const fingerprintHash = themeFingerprint(this.theme);
-			if (fingerprintHash === null) {
-				fallback(counters, "fingerprint");
-				return orig.call(this, width);
-			}
-			const hyperlinksBit = getCaps().hyperlinks ? "1" : "0";
-			const keyBase = [String(width), String(this.paddingX), signatureHash, fingerprintHash, hyperlinksBit, transformId];
+    let key;
+    let wholeKey;
+    let settled;
+    let tail;
+    try {
+      // (d) Gate callback compatibility before bounded output probing.
+      const signatureHash = themeSignature(this.theme);
+      if (signatureHash === null) {
+        fallback(counters, "callback-signature");
+        return orig.call(this, width);
+      }
+      const fingerprintHash = themeFingerprint(this.theme);
+      if (fingerprintHash === null) {
+        fallback(counters, "fingerprint");
+        return orig.call(this, width);
+      }
+      const hyperlinksBit = getCaps().hyperlinks ? "1" : "0";
+      const keyBase = [
+        String(width),
+        String(this.paddingX),
+        signatureHash,
+        fingerprintHash,
+        hyperlinksBit,
+        transformId,
+      ];
 
-			// (c0) Whole-text entry. Streaming needs the prefix split below, but a
-			// session also redraws text that is already finished — half the renders
-			// in a resumed session are an exact repeat of one already done. Those
-			// never reached the split path alive, because a single block settles to
-			// "" and went straight to the original. What is stored here IS the
-			// original's output, so it needs no verification, only a fresh copy.
-			wholeKey = frameParts(["whole", this.text, ...keyBase]);
-			const whole = cache.get(wholeKey);
-			if (whole !== undefined) {
-				counters.hits++;
-				return whole.slice();
-			}
+      // (c0) Whole-text entry. Streaming needs the prefix split below, but a
+      // session also redraws text that is already finished — half the renders
+      // in a resumed session are an exact repeat of one already done. Those
+      // never reached the split path alive, because a single block settles to
+      // "" and went straight to the original. What is stored here IS the
+      // original's output, so it needs no verification, only a fresh copy.
+      wholeKey = frameParts(["whole", this.text, ...keyBase]);
+      const whole = cache.get(wholeKey);
+      if (whole !== undefined) {
+        counters.hits++;
+        const n = ++state.wholeHits;
+        if (n <= VERIFY_FIRST_FILLS || n % VERIFY_SAMPLE_EVERY === 0) {
+          const full = orig.call(this, width);
+          if (!linesEqual(full, whole)) {
+            // Two closures shared a source but not a result: stop trusting
+            // this source, drop what it produced, hand back the original.
+            state.verifyFailures++;
+            counters.hits--;
+            fallback(counters, "source-mismatch");
+            blacklistedSources.add(transformId);
+            return full;
+          }
+        }
+        return whole.slice();
+      }
 
-			// (c) Conservative split; hazards → settled "" → whole-text entry.
-			({ settled, tail } = splitSettled(this.text));
-			if (settled === "" || endsWithIndentedCode(settled)) {
-				counters.misses++;
-				const full = orig.call(this, width);
-				const cost = this.text.length + wholeKey.length + full.reduce((sum, line) => sum + line.length, 0);
-				if (cost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) cache.set(wholeKey, full.slice(), cost);
-				return full;
-			}
-			key = frameParts([
-				settled,
-				...keyBase,
-			]);
-		} catch {
-			// Exotic theme/capabilities/text → any doubt means orig.
-			fallback(counters, "key-build");
-			return orig.call(this, width);
-		}
+      // (c) Conservative split; hazards → settled "" → whole-text entry.
+      ({ settled, tail } = splitSettled(this.text));
+      if (settled === "" || endsWithIndentedCode(settled)) {
+        counters.misses++;
+        const full = orig.call(this, width);
+        const cost =
+          this.text.length +
+          wholeKey.length +
+          full.reduce((sum, line) => sum + line.length, 0);
+        if (cost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR)
+          cache.set(wholeKey, full.slice(), cost);
+        return full;
+      }
+      key = frameParts([settled, ...keyBase]);
+    } catch {
+      // Exotic theme/capabilities/text → any doubt means orig.
+      fallback(counters, "key-build");
+      return orig.call(this, width);
+    }
 
-		// (e) Prefix lines: global cache, or one original render on a scratch
-		// instance (same paddingX/theme, no paddingY/style/options).
-		let prefixLines = cache.get(key);
-		const isFill = prefixLines === undefined;
-		if (isFill) {
-			counters.misses++;
-			prefixLines = orig.call(new Markdown(settled, this.paddingX, 0, this.theme, undefined, this.options), width);
-		} else {
-			counters.hits++;
-		}
+    // (e) Prefix lines: global cache, or one original render on a scratch
+    // instance (same paddingX/theme, no paddingY/style/options).
+    let prefixLines = cache.get(key);
+    const isFill = prefixLines === undefined;
+    if (isFill) {
+      counters.misses++;
+      prefixLines = orig.call(
+        new Markdown(
+          settled,
+          this.paddingX,
+          0,
+          this.theme,
+          undefined,
+          this.options,
+        ),
+        width,
+      );
+    } else {
+      counters.hits++;
+    }
 
-		// (f) Tail lines: original render on a scratch tail instance. The tail
-		// keeps the whole blank run, so its leading space token re-emits the
-		// inter-block "" separator line (seam contract, split.js).
-		const tailLines = orig.call(new Markdown(tail, this.paddingX, 0, this.theme, undefined, this.options), width);
+    // (f) Tail lines: original render on a scratch tail instance. The tail
+    // keeps the whole blank run, so its leading space token re-emits the
+    // inter-block "" separator line (seam contract, split.js).
+    const tailLines = orig.call(
+      new Markdown(tail, this.paddingX, 0, this.theme, undefined, this.options),
+      width,
+    );
 
-		// (g) ALWAYS a fresh array — never hand out the globally cached one.
-		const stitched = prefixLines.concat(tailLines);
+    // (g) ALWAYS a fresh array — never hand out the globally cached one.
+    const stitched = prefixLines.concat(tailLines);
 
-		// (e2) Sampled miss-time differential self-verification (v1.2.0): compare
-		// the stitched result against a full original render on the first fills
-		// and periodically afterwards. Mismatch → permanently blacklist the theme
-		// object, do not cache, and return the (correct-by-definition) original.
-		if (isFill) {
-			const n = ++state.fillCount;
-			if (n <= VERIFY_FIRST_FILLS || n % VERIFY_SAMPLE_EVERY === 0) {
-				const full = orig.call(this, width);
-				if (!linesEqual(full, stitched)) {
-					blacklist.add(this.theme);
-					state.verifyFailures++;
-					fallback(counters, "verify-mismatch");
-					return full; // orig already set this instance's cache coherently
-				}
-			}
-			const retainedCost =
-				settled.length + key.length + prefixLines.reduce((sum, line) => sum + line.length, 0);
-			if (retainedCost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) {
-				cache.set(key, prefixLines, retainedCost);
-			}
-		}
-		const result = stitched.length > 0 ? stitched : [""];
-		// (h) Per-instance cache coherence (second same-frame call → O(1) path).
-		this.cachedText = this.text;
-		this.cachedWidth = width;
-		this.cachedLines = result;
-		return result;
-	};
+    // (e2) Sampled miss-time differential self-verification (v1.2.0): compare
+    // the stitched result against a full original render on the first fills
+    // and periodically afterwards. Mismatch → permanently blacklist the theme
+    // object, do not cache, and return the (correct-by-definition) original.
+    if (isFill) {
+      const n = ++state.fillCount;
+      if (n <= VERIFY_FIRST_FILLS || n % VERIFY_SAMPLE_EVERY === 0) {
+        const full = orig.call(this, width);
+        if (!linesEqual(full, stitched)) {
+          blacklist.add(this.theme);
+          state.verifyFailures++;
+          fallback(counters, "verify-mismatch");
+          return full; // orig already set this instance's cache coherently
+        }
+      }
+      const retainedCost =
+        settled.length +
+        key.length +
+        prefixLines.reduce((sum, line) => sum + line.length, 0);
+      if (retainedCost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) {
+        cache.set(key, prefixLines, retainedCost);
+      }
+    }
+    const result = stitched.length > 0 ? stitched : [""];
+    // (h) Per-instance cache coherence (second same-frame call → O(1) path).
+    this.cachedText = this.text;
+    this.cachedWidth = width;
+    this.cachedLines = result;
+    return result;
+  };
 }
 
 /**
@@ -364,36 +463,41 @@ function makePatchedRender(state) {
  * @param {{Markdown: Function, getCapabilities?: () => {hyperlinks: boolean}, budgetChars?: number}} deps
  * @returns {{installed: boolean, adopted?: boolean, reason?: string}}
  */
-export function install({ Markdown, getCapabilities, budgetChars = LEGACY_BUDGET_CHARS_DEFAULT }) {
-	const existing = globalThis[STATE_KEY];
-	if (existing) {
-		const current = existing.Markdown.prototype.render;
-		if (current === existing.patched) return { installed: true, adopted: true };
-		if (current === existing.orig) {
-			// State survived but the prototype is pristine (e.g. interrupted teardown):
-			// re-applying OUR patch over the tracked original is safe, not layering.
-			existing.Markdown.prototype.render = existing.patched;
-			return { installed: true, adopted: true };
-		}
-		return { installed: false, reason: "ownership-lost" }; // never layer over a foreign fn
-	}
-	const orig = Markdown.prototype.render;
-	const state = {
-		orig,
-		origHash: hashString(orig.toString()), // diagnostics only; activation is behavioral (canaryVerify + self-verification)
-		cache: makeBudgetCache(budgetChars * COST_UNIT_SCALE),
-		counters: makeCounters(),
-		Markdown,
-		getCaps: getCapabilities ?? (() => ({ hyperlinks: false })),
-		blacklist: new WeakSet(), // theme objects that failed differential self-verification
-		fillCount: 0,
-		verifyFailures: 0,
-		patched: null,
-	};
-	state.patched = makePatchedRender(state);
-	globalThis[STATE_KEY] = state;
-	Markdown.prototype.render = state.patched;
-	return { installed: true };
+export function install({
+  Markdown,
+  getCapabilities,
+  budgetChars = LEGACY_BUDGET_CHARS_DEFAULT,
+}) {
+  const existing = globalThis[STATE_KEY];
+  if (existing) {
+    const current = existing.Markdown.prototype.render;
+    if (current === existing.patched) return { installed: true, adopted: true };
+    if (current === existing.orig) {
+      // State survived but the prototype is pristine (e.g. interrupted teardown):
+      // re-applying OUR patch over the tracked original is safe, not layering.
+      existing.Markdown.prototype.render = existing.patched;
+      return { installed: true, adopted: true };
+    }
+    return { installed: false, reason: "ownership-lost" }; // never layer over a foreign fn
+  }
+  const orig = Markdown.prototype.render;
+  const state = {
+    orig,
+    origHash: hashString(orig.toString()), // diagnostics only; activation is behavioral (canaryVerify + self-verification)
+    cache: makeBudgetCache(budgetChars * COST_UNIT_SCALE),
+    counters: makeCounters(),
+    Markdown,
+    getCaps: getCapabilities ?? (() => ({ hyperlinks: false })),
+    blacklist: new WeakSet(), // theme objects that failed differential self-verification
+    fillCount: 0,
+    wholeHits: 0,
+    verifyFailures: 0,
+    patched: null,
+  };
+  state.patched = makePatchedRender(state);
+  globalThis[STATE_KEY] = state;
+  Markdown.prototype.render = state.patched;
+  return { installed: true };
 }
 
 /**
@@ -404,19 +508,19 @@ export function install({ Markdown, getCapabilities, budgetChars = LEGACY_BUDGET
  * @returns {{restored: boolean, reason?: string}}
  */
 export function uninstall() {
-	const state = globalThis[STATE_KEY];
-	if (!state) return { restored: true }; // nothing installed → already pristine
-	const current = state.Markdown.prototype.render;
-	if (current === state.patched) {
-		state.Markdown.prototype.render = state.orig;
-		delete globalThis[STATE_KEY];
-		return { restored: true };
-	}
-	if (current === state.orig) {
-		delete globalThis[STATE_KEY]; // prototype already pristine
-		return { restored: true };
-	}
-	return { restored: false, reason: "ownership-lost" }; // keep state; restart required
+  const state = globalThis[STATE_KEY];
+  if (!state) return { restored: true }; // nothing installed → already pristine
+  const current = state.Markdown.prototype.render;
+  if (current === state.patched) {
+    state.Markdown.prototype.render = state.orig;
+    delete globalThis[STATE_KEY];
+    return { restored: true };
+  }
+  if (current === state.orig) {
+    delete globalThis[STATE_KEY]; // prototype already pristine
+    return { restored: true };
+  }
+  return { restored: false, reason: "ownership-lost" }; // keep state; restart required
 }
 
 // Representative canary corpus: each doc has at least one safe settled
@@ -424,12 +528,12 @@ export function uninstall() {
 // they cover headings, inline styles, lists, fences, quotes, rules, tables,
 // links, and non-ASCII text.
 const CANARY_DOCS = Object.freeze([
-	"# Heading\n\nParagraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\nSecond paragraph follows here.\n",
-	"First block paragraph.\n\n- list item one\n- list item two\n\n1. ordered one\n2. ordered two\n\nClosing paragraph.\n",
-	"Intro paragraph.\n\n```js\nfunction add(a, b) {\n  return a + b;\n}\n```\n\nAfter the fence with `inline code`.\n",
-	"> quoted line\n> second quoted line\n\nParagraph after quote.\n\n---\n\nParagraph after rule.\n",
-	"Unicode: русский текст, 日本語, emoji 🚀🎉.\n\nSecond paragraph with héllo wörld and e\u0301 combining.\n\nThird block wraps at narrow widths too.\n",
-	"| col a | col b |\n| --- | ---: |\n| 1 | 2 |\n\nParagraph after the table block.\n",
+  "# Heading\n\nParagraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\nSecond paragraph follows here.\n",
+  "First block paragraph.\n\n- list item one\n- list item two\n\n1. ordered one\n2. ordered two\n\nClosing paragraph.\n",
+  "Intro paragraph.\n\n```js\nfunction add(a, b) {\n  return a + b;\n}\n```\n\nAfter the fence with `inline code`.\n",
+  "> quoted line\n> second quoted line\n\nParagraph after quote.\n\n---\n\nParagraph after rule.\n",
+  "Unicode: русский текст, 日本語, emoji 🚀🎉.\n\nSecond paragraph with héllo wörld and e\u0301 combining.\n\nThird block wraps at narrow widths too.\n",
+  "| col a | col b |\n| --- | ---: |\n| 1 | 2 |\n\nParagraph after the table block.\n",
 ]);
 const CANARY_WIDTHS = Object.freeze([40, 80]);
 
@@ -444,56 +548,75 @@ const CANARY_WIDTHS = Object.freeze([40, 80]);
  * @returns {{ok: boolean, reason?: string}}
  */
 export function canaryVerify({ Markdown, getCapabilities, theme }) {
-	if (theme === null || typeof theme !== "object") {
-		return { ok: false, reason: "markdown theme unavailable for differential canary" };
-	}
-	if (globalThis[STATE_KEY]) {
-		return { ok: false, reason: "canary refused: md-cache state already present" };
-	}
-	const res = install({ Markdown, getCapabilities });
-	if (!res.installed) return { ok: false, reason: res.reason ?? "canary install refused" };
-	const state = globalThis[STATE_KEY];
-	try {
-		for (let i = 0; i < CANARY_DOCS.length; i++) {
-			const text = CANARY_DOCS[i];
-			for (const width of CANARY_WIDTHS) {
-				const expected = state.orig.call(new Markdown(text, 1, 0, theme), width);
-				for (let pass = 0; pass < 2; pass++) {
-					const actual = new Markdown(text, 1, 0, theme).render(width);
-					if (!linesEqual(expected, actual)) {
-						return {
-							ok: false,
-							reason: `differential canary mismatch (doc ${i}, width ${width}, pass ${pass})`,
-						};
-					}
-				}
-			}
-		}
-		if (state.verifyFailures > 0) {
-			return {
-				ok: false,
-				reason: "differential canary: stitched output diverged from the original render (self-verification)",
-			};
-		}
-		const { hits, misses } = state.counters;
-		if (misses === 0 || hits === 0) {
-			return {
-				ok: false,
-				reason: `differential canary produced no cache activity (hits ${hits}, misses ${misses}) — renderer or theme contract unsupported`,
-			};
-		}
-		return { ok: true };
-	} catch (err) {
-		return { ok: false, reason: `differential canary threw: ${err}` };
-	} finally {
-		uninstall();
-	}
+  if (theme === null || typeof theme !== "object") {
+    return {
+      ok: false,
+      reason: "markdown theme unavailable for differential canary",
+    };
+  }
+  if (globalThis[STATE_KEY]) {
+    return {
+      ok: false,
+      reason: "canary refused: md-cache state already present",
+    };
+  }
+  const res = install({ Markdown, getCapabilities });
+  if (!res.installed)
+    return { ok: false, reason: res.reason ?? "canary install refused" };
+  const state = globalThis[STATE_KEY];
+  try {
+    for (let i = 0; i < CANARY_DOCS.length; i++) {
+      const text = CANARY_DOCS[i];
+      for (const width of CANARY_WIDTHS) {
+        const expected = state.orig.call(
+          new Markdown(text, 1, 0, theme),
+          width,
+        );
+        for (let pass = 0; pass < 2; pass++) {
+          const actual = new Markdown(text, 1, 0, theme).render(width);
+          if (!linesEqual(expected, actual)) {
+            return {
+              ok: false,
+              reason: `differential canary mismatch (doc ${i}, width ${width}, pass ${pass})`,
+            };
+          }
+        }
+      }
+    }
+    if (state.verifyFailures > 0) {
+      return {
+        ok: false,
+        reason:
+          "differential canary: stitched output diverged from the original render (self-verification)",
+      };
+    }
+    const { hits, misses } = state.counters;
+    if (misses === 0 || hits === 0) {
+      return {
+        ok: false,
+        reason: `differential canary produced no cache activity (hits ${hits}, misses ${misses}) — renderer or theme contract unsupported`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: `differential canary threw: ${err}` };
+  } finally {
+    uninstall();
+  }
 }
 
 /** chars is estimated retained cost; public stats shape is unchanged. */
 export function getStats() {
-	const state = globalThis[STATE_KEY];
-	if (!state) return { hits: 0, misses: 0, fallbacks: 0, reasons: {}, chars: 0, size: 0 };
-	const { hits, misses, fallbacks, reasons } = state.counters;
-	return { hits, misses, fallbacks, reasons: { ...reasons }, chars: state.cache.chars, size: state.cache.size };
+  const state = globalThis[STATE_KEY];
+  if (!state)
+    return { hits: 0, misses: 0, fallbacks: 0, reasons: {}, chars: 0, size: 0 };
+  const { hits, misses, fallbacks, reasons } = state.counters;
+  return {
+    hits,
+    misses,
+    fallbacks,
+    reasons: { ...reasons },
+    chars: state.cache.chars,
+    size: state.cache.size,
+  };
 }

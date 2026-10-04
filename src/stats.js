@@ -7,7 +7,7 @@
 
 /** @returns {{hits: number, misses: number, fallbacks: number}} */
 export function makeCounters() {
-	return { hits: 0, misses: 0, fallbacks: 0, reasons: {} };
+  return { hits: 0, misses: 0, fallbacks: 0, reasons: {} };
 }
 
 /**
@@ -19,43 +19,43 @@ export function makeCounters() {
  * @param {number} budgetChars total conservative retained-cost units across entries
  */
 export function makeBudgetCache(budgetChars = 2_000_000) {
-	const map = new Map(); // key → { value, cost }; Map preserves insertion order → FIFO
-	let chars = 0;
-	return {
-		get budgetChars() {
-			return budgetChars;
-		},
-		get size() {
-			return map.size;
-		},
-		get chars() {
-			return chars;
-		},
-		/** @returns {unknown | undefined} */
-		get(key) {
-			const entry = map.get(key);
-			return entry === undefined ? undefined : entry.value;
-		},
-		/**
-		 * @param {string} key
-		 * @param {unknown} value
-		 * @param {number} cost caller-supplied estimated retained cost of this entry
-		 */
-		set(key, value, cost) {
-			if (cost > budgetChars || map.has(key)) return;
-			while (chars + cost > budgetChars && map.size > 0) {
-				const oldestKey = map.keys().next().value;
-				chars -= map.get(oldestKey).cost;
-				map.delete(oldestKey);
-			}
-			map.set(key, { value, cost });
-			chars += cost;
-		},
-		clear() {
-			map.clear();
-			chars = 0;
-		},
-	};
+  const map = new Map(); // key → { value, cost }; Map preserves insertion order → FIFO
+  let chars = 0;
+  return {
+    get budgetChars() {
+      return budgetChars;
+    },
+    get size() {
+      return map.size;
+    },
+    get chars() {
+      return chars;
+    },
+    /** @returns {unknown | undefined} */
+    get(key) {
+      const entry = map.get(key);
+      return entry === undefined ? undefined : entry.value;
+    },
+    /**
+     * @param {string} key
+     * @param {unknown} value
+     * @param {number} cost caller-supplied estimated retained cost of this entry
+     */
+    set(key, value, cost) {
+      if (cost > budgetChars || map.has(key)) return;
+      while (chars + cost > budgetChars && map.size > 0) {
+        const oldestKey = map.keys().next().value;
+        chars -= map.get(oldestKey).cost;
+        map.delete(oldestKey);
+      }
+      map.set(key, { value, cost });
+      chars += cost;
+    },
+    clear() {
+      map.clear();
+      chars = 0;
+    },
+  };
 }
 
 /**
@@ -66,8 +66,8 @@ export function makeBudgetCache(budgetChars = 2_000_000) {
  * bundle, so a patch nobody calls has to say so in plain words.
  */
 export function reachLine(rendererSource, counters) {
-	const calls = counters.hits + counters.misses + counters.fallbacks;
-	return calls === 0
-		? `patched ${rendererSource} | NOT REACHING THE RENDERER (0 calls)`
-		: `patched ${rendererSource} | ${calls} calls`;
+  const calls = counters.hits + counters.misses + counters.fallbacks;
+  return calls === 0
+    ? `patched ${rendererSource} | NOT REACHING THE RENDERER (0 calls)`
+    : `patched ${rendererSource} | ${calls} calls`;
 }
