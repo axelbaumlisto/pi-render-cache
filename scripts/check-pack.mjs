@@ -16,6 +16,8 @@ const REQUIRED = [
 	"scripts/check-upstream.mjs",
 	"scripts/resolve-pi.mjs",
 	"src/md-cache.js",
+	"src/md-policy.js",
+	"src/metrics.js",
 	"src/patch-state.js",
 	"src/seg-cache.js",
 	"src/split.js",

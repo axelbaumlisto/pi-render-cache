@@ -14,3 +14,4 @@ import "./live-module.test.js";
 import "./reach-line.test.js";
 import "./metrics.test.js";
 import "./transform-option.test.js";
+import "./md-policy.test.js";

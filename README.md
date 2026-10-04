@@ -48,6 +48,35 @@ The v1.1.1 release replay used Apple M3, Node 22.23.0, pi/pi-tui 0.84.1, and 20 
 
 Every replay cut point was byte-identical. The sanitized evidence, memory deltas, environment, and hashes are in [`evidence/v1.1.1/summary.json`](https://github.com/axelbaumlisto/pi-render-cache/blob/v1.1.1/evidence/v1.1.1/summary.json); methodology and upstream state are in [`docs/UPSTREAM_STATUS.md`](docs/UPSTREAM_STATUS.md). From a source checkout, reproduce the release workload with `npm run premise`.
 
+### What this does on pi 1.x: the markdown cache is off
+
+pi 1.0 added a render cache of its own — lines kept per component and width —
+and a Markdown instance already keeps the lines it last produced. So the work
+this extension's markdown cache was built to remove is gone, and what remains
+is its own cost.
+
+Four live sessions (240, 98, 85 and 76 MB), each resumed, scrolled through its
+history and streamed into: **222 misses, zero hits**. The host never asked for
+the same text twice.
+
+Same work, same classes a real pi loads, 6600 lines, five runs, medians:
+
+| Patches | Median | vs none |
+|---|---:|---:|
+| none | 87.3 ms | — |
+| segment cache | 81.3 ms | **1.07x** |
+| markdown cache | 104.7 ms | 0.83x |
+| both | 99.2 ms | 0.88x |
+
+The markdown run had 240 hits out of 360 and still lost: building a key costs a
+theme fingerprint probe and a hash of the whole text, which is now dearer than
+the render it replaces.
+
+So from pi 1.0 the markdown cache installs only when asked for
+(`PI_RENDER_CACHE_MD=1`), and the segment cache stays on. Everything below was
+measured on the pi line that still rebuilt the whole message per streamed
+chunk; it does not describe 1.x.
+
 ### Live session, measured through pi itself: pi 1.0.2, 2026-10
 
 Every number above it comes from a replay harness that imports the TUI package
