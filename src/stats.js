@@ -7,7 +7,7 @@
 
 /** @returns {{hits: number, misses: number, fallbacks: number}} */
 export function makeCounters() {
-	return { hits: 0, misses: 0, fallbacks: 0 };
+	return { hits: 0, misses: 0, fallbacks: 0, reasons: {} };
 }
 
 /**

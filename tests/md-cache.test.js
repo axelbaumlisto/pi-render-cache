@@ -275,7 +275,13 @@ test("I5 stream-sim: hazard arriving at chunk N resets settled, output identical
 				`hazard stream step at len=${text.length}`,
 			);
 		}
-		assert.ok(getStats().fallbacks > f0, "hazard steps must go through the fallback path");
+		// Hazard text is no longer recomputed on every repeat: it is served from
+		// the whole-text entry, which stores exactly what the original returned.
+		// The contract that matters is above — every step byte-identical to orig.
+		assert.equal(getStats().fallbacks, f0, "hazard steps must not take the split path");
+		const hitsBefore = getStats().hits;
+		assert.deepEqual(new Markdown(doc, 1, 0, mdTheme).render(80), renderOrig(doc, 80));
+		assert.ok(getStats().hits > hitsBefore, "a repeated hazard render must be a cache hit");
 	} finally {
 		uninstall();
 	}

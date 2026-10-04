@@ -71,6 +71,27 @@ export const CORE_THEME_KEYS = Object.freeze(
 );
 
 /** djb2 hash → hex string; used for compact compatibility/cache identities. */
+/**
+ * A stable id for an options value, so two different transforms cannot collide
+ * in the cache. Identity only — a transform is never inspected or called here.
+ */
+const identities = new WeakMap();
+let nextIdentity = 0;
+export function identify(value) {
+	let id = identities.get(value);
+	if (id === undefined) {
+		id = `t${++nextIdentity}`;
+		identities.set(value, id);
+	}
+	return id;
+}
+
+/** Why a render went to the original — a bare count cannot be acted on. */
+function fallback(counters, reason) {
+	counters.fallbacks++;
+	counters.reasons[reason] = (counters.reasons[reason] ?? 0) + 1;
+}
+
 export function hashString(str) {
 	let h = 5381;
 	for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
@@ -206,56 +227,83 @@ function makePatchedRender(state) {
 			return this.cachedLines;
 		}
 		// (b) Non-cacheable configurations → orig entirely.
-		if (
-			typeof this.text !== "string" ||
-			this.paddingY > 0 ||
-			this.defaultTextStyle != null ||
-			(this.options != null && Object.keys(this.options).length > 0)
-		) {
-			counters.fallbacks++;
+		if (typeof this.text !== "string" || this.paddingY > 0 || this.defaultTextStyle != null) {
+			fallback(counters, "styled-or-padded");
 			return orig.call(this, width);
 		}
+		// pi 1.0.x hands every assistant message a transform in options, which
+		// used to send every render here to the original — the cache stored
+		// nothing at all. A transform is carried through to the scratch
+		// instances and folded into the key by identity, so two different
+		// transforms can never share an entry. Anything else in options is
+		// still unknown, and unknown means fall back.
+		const optionKeys = this.options == null ? [] : Object.keys(this.options);
+		if (optionKeys.some((k) => k !== "transform")) {
+			fallback(counters, "unknown-option");
+			return orig.call(this, width);
+		}
+		const transform = this.options?.transform;
+		if (transform !== undefined && typeof transform !== "function" && typeof transform !== "object") {
+			fallback(counters, "exotic-transform");
+			return orig.call(this, width);
+		}
+		const transformId = transform === undefined ? "" : identify(transform);
 		// (g-pre) Empty/whitespace text: orig handles []-semantics + instance cache.
 		if (!this.text || this.text.trim() === "") return orig.call(this, width);
 		// (b2) Theme failed a previous differential self-verification → orig forever.
 		if (this.theme !== null && typeof this.theme === "object" && blacklist.has(this.theme)) {
-			counters.fallbacks++;
+			fallback(counters, "blacklisted-theme");
 			return orig.call(this, width);
 		}
 
 		let key;
+		let wholeKey;
 		let settled;
 		let tail;
 		try {
-			// (c) Conservative split; hazards → settled "" → orig path entirely.
-			({ settled, tail } = splitSettled(this.text));
-			if (settled === "" || endsWithIndentedCode(settled)) {
-				counters.fallbacks++;
-				return orig.call(this, width);
-			}
 			// (d) Gate callback compatibility before bounded output probing.
 			const signatureHash = themeSignature(this.theme);
 			if (signatureHash === null) {
-				counters.fallbacks++;
+				fallback(counters, "callback-signature");
 				return orig.call(this, width);
 			}
 			const fingerprintHash = themeFingerprint(this.theme);
 			if (fingerprintHash === null) {
-				counters.fallbacks++;
+				fallback(counters, "fingerprint");
 				return orig.call(this, width);
 			}
 			const hyperlinksBit = getCaps().hyperlinks ? "1" : "0";
+			const keyBase = [String(width), String(this.paddingX), signatureHash, fingerprintHash, hyperlinksBit, transformId];
+
+			// (c0) Whole-text entry. Streaming needs the prefix split below, but a
+			// session also redraws text that is already finished — half the renders
+			// in a resumed session are an exact repeat of one already done. Those
+			// never reached the split path alive, because a single block settles to
+			// "" and went straight to the original. What is stored here IS the
+			// original's output, so it needs no verification, only a fresh copy.
+			wholeKey = frameParts(["whole", this.text, ...keyBase]);
+			const whole = cache.get(wholeKey);
+			if (whole !== undefined) {
+				counters.hits++;
+				return whole.slice();
+			}
+
+			// (c) Conservative split; hazards → settled "" → whole-text entry.
+			({ settled, tail } = splitSettled(this.text));
+			if (settled === "" || endsWithIndentedCode(settled)) {
+				counters.misses++;
+				const full = orig.call(this, width);
+				const cost = this.text.length + wholeKey.length + full.reduce((sum, line) => sum + line.length, 0);
+				if (cost <= cache.budgetChars / MAX_ENTRY_BUDGET_DIVISOR) cache.set(wholeKey, full.slice(), cost);
+				return full;
+			}
 			key = frameParts([
 				settled,
-				String(width),
-				String(this.paddingX),
-				signatureHash,
-				fingerprintHash,
-				hyperlinksBit,
+				...keyBase,
 			]);
 		} catch {
 			// Exotic theme/capabilities/text → any doubt means orig.
-			counters.fallbacks++;
+			fallback(counters, "key-build");
 			return orig.call(this, width);
 		}
 
@@ -265,7 +313,7 @@ function makePatchedRender(state) {
 		const isFill = prefixLines === undefined;
 		if (isFill) {
 			counters.misses++;
-			prefixLines = orig.call(new Markdown(settled, this.paddingX, 0, this.theme), width);
+			prefixLines = orig.call(new Markdown(settled, this.paddingX, 0, this.theme, undefined, this.options), width);
 		} else {
 			counters.hits++;
 		}
@@ -273,7 +321,7 @@ function makePatchedRender(state) {
 		// (f) Tail lines: original render on a scratch tail instance. The tail
 		// keeps the whole blank run, so its leading space token re-emits the
 		// inter-block "" separator line (seam contract, split.js).
-		const tailLines = orig.call(new Markdown(tail, this.paddingX, 0, this.theme), width);
+		const tailLines = orig.call(new Markdown(tail, this.paddingX, 0, this.theme, undefined, this.options), width);
 
 		// (g) ALWAYS a fresh array — never hand out the globally cached one.
 		const stitched = prefixLines.concat(tailLines);
@@ -289,7 +337,7 @@ function makePatchedRender(state) {
 				if (!linesEqual(full, stitched)) {
 					blacklist.add(this.theme);
 					state.verifyFailures++;
-					counters.fallbacks++;
+					fallback(counters, "verify-mismatch");
 					return full; // orig already set this instance's cache coherently
 				}
 			}
@@ -445,7 +493,7 @@ export function canaryVerify({ Markdown, getCapabilities, theme }) {
 /** chars is estimated retained cost; public stats shape is unchanged. */
 export function getStats() {
 	const state = globalThis[STATE_KEY];
-	if (!state) return { hits: 0, misses: 0, fallbacks: 0, chars: 0, size: 0 };
-	const { hits, misses, fallbacks } = state.counters;
-	return { hits, misses, fallbacks, chars: state.cache.chars, size: state.cache.size };
+	if (!state) return { hits: 0, misses: 0, fallbacks: 0, reasons: {}, chars: 0, size: 0 };
+	const { hits, misses, fallbacks, reasons } = state.counters;
+	return { hits, misses, fallbacks, reasons: { ...reasons }, chars: state.cache.chars, size: state.cache.size };
 }
