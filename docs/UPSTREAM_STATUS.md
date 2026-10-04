@@ -1,5 +1,14 @@
 # Upstream status and release evidence
 
+## Managed installs (v1.2.3)
+
+pi 1.0.1 introduced a managed install: the `pi` on `PATH` is a shell launcher under `~/.pi/agent/bin`, and the package
+sits in `~/.pi/agent/install/releases/<version>/node_modules/@earendil-works/pi-coding-agent`. Resolving the theme
+module by walking the filesystem up from the launcher therefore found nothing, and md-cache reported
+`unsupported: markdown theme unavailable for differential canary` after `pi update`. The theme is now taken from the
+host package (`import("@earendil-works/pi-coding-agent")`, which re-exports `getMarkdownTheme`), so the layout no
+longer matters; the filesystem walk stays as the fallback for `PI_PACKAGE_ROOT` fixtures.
+
 ## Supported pi line (v1.2.2)
 
 `compatibility.json` declares `supported.pi: ">=1.0.0"`. Support is that range plus the install-time behavioral

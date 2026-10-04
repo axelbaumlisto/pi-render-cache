@@ -42,16 +42,37 @@ const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
  * symbol, so getMarkdownTheme() reflects the active theme. Returns null when
  * unavailable (md-cache then stays "unsupported" — fail closed).
  */
+/** Turn a theme module (host package or file path) into the markdown theme object. */
+function themeFrom(mod: Record<string, unknown>): object | null {
+	if (!(globalThis as Record<symbol, unknown>)[THEME_KEY] && typeof mod.initTheme === "function") {
+		(mod.initTheme as (name: string) => void)("dark"); // no watcher; host re-initializes with the user's theme
+	}
+	const theme = typeof mod.getMarkdownTheme === "function" ? (mod.getMarkdownTheme as () => unknown)() : null;
+	return theme !== null && typeof theme === "object" ? (theme as object) : null;
+}
+
 async function loadMarkdownTheme(): Promise<object | null> {
+	// 1. The host package itself. pi re-exports getMarkdownTheme from its main
+	//    entry and provides the package to extensions, so this works whatever the
+	//    install layout is — including pi's managed install (>=1.0.1), where the
+	//    `pi` on PATH is a shell launcher and the package lives under
+	//    ~/.pi/agent/install/releases/<version>/node_modules/. Walking the
+	//    filesystem from the launcher finds nothing there, which is what turned
+	//    md-cache "unsupported: markdown theme unavailable" after `pi update`.
+	try {
+		const host = (await import("@earendil-works/pi-coding-agent")) as unknown as Record<string, unknown>;
+		const theme = themeFrom(host);
+		if (theme) return theme;
+	} catch {
+		/* host import unavailable (tests, odd hosts) → fall through to the path */
+	}
+
+	// 2. Filesystem resolution: PI_PACKAGE_ROOT fixtures and any host that does
+	//    not re-export the theme from its entry point.
 	try {
 		const root = resolvePiRoot().root;
 		const themePath = resolveThemeModule(root).path;
-		const mod = await import(pathToFileURL(themePath).href);
-		if (!(globalThis as Record<symbol, unknown>)[THEME_KEY] && typeof mod.initTheme === "function") {
-			mod.initTheme("dark"); // no watcher; host re-initializes with the user's theme
-		}
-		const theme = typeof mod.getMarkdownTheme === "function" ? mod.getMarkdownTheme() : null;
-		return theme !== null && typeof theme === "object" ? theme : null;
+		return themeFrom((await import(pathToFileURL(themePath).href)) as unknown as Record<string, unknown>);
 	} catch {
 		return null;
 	}
