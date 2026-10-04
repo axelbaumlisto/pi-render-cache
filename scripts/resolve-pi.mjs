@@ -16,6 +16,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const PI_PKG = "@earendil-works/pi-coding-agent";
 const TUI_PKG = "@earendil-works/pi-tui";
@@ -195,4 +196,36 @@ export function resolveThemeModule(piRoot) {
 		);
 	}
 	return { path: fs.realpathSync(themePath) };
+}
+
+/**
+ * The module pi's renderer actually runs from.
+ *
+ * Since pi 0.84.3 the TUI is inlined into pi's own bundle, so the installed
+ * `@earendil-works/pi-tui` package is a copy nobody loads — patching it has no
+ * effect on a live session (measured: 0 calls through the package, 50 through
+ * the bundle). Node keys the ESM cache by resolved path, so importing the chunk
+ * by its absolute path hands back the very module object pi is using.
+ *
+ * Chunk names are content-hashed and change every release, so the chunk is
+ * found by what it exports, never by name. Returns null when the layout has no
+ * bundle (pi <= 0.84.2), where the package IS the live module.
+ */
+export async function resolveLiveTuiModule(piRoot) {
+	const chunkDir = path.join(piRoot, "dist", "bundle", "chunks");
+	if (!fs.existsSync(chunkDir)) return null;
+
+	for (const file of fs.readdirSync(chunkDir)) {
+		if (!file.endsWith(".js")) continue;
+		let mod;
+		try {
+			mod = await import(pathToFileURL(path.join(chunkDir, file)).href);
+		} catch {
+			continue; // a chunk that cannot stand alone is not the renderer
+		}
+		if (typeof mod?.Markdown?.prototype?.render === "function" && typeof mod?.getCapabilities === "function") {
+			return { module: mod, path: path.join(chunkDir, file) };
+		}
+	}
+	return null;
 }

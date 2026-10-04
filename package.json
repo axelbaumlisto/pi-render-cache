@@ -1,6 +1,6 @@
 {
 	"name": "pi-render-cache",
-	"version": "1.2.4",
+	"version": "1.3.0",
 	"description": "Reduces pi coding-agent TUI streaming render work with independent bounded caches for Intl.Segmenter and unstyled Markdown",
 	"type": "module",
 	"license": "MIT",
@@ -59,6 +59,7 @@
 		"release:feasibility": "node scripts/release-feasibility.mjs",
 		"release:verify": "npm run verify && npm run premise && npm run release:feasibility -- --input .bench-results/premise-raw.json --output .bench-results/release-verify.json",
 		"check": "npm run verify",
-		"prepublishOnly": "npm run verify"
+		"prepublishOnly": "npm run verify",
+		"verify:live": "node scripts/verify-live.mjs"
 	}
 }

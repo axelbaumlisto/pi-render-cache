@@ -28,11 +28,14 @@
  */
 import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getCapabilities, Markdown } from "@earendil-works/pi-tui";
+import {
+	getCapabilities as packageGetCapabilities,
+	Markdown as PackageMarkdown,
+} from "@earendil-works/pi-tui";
 import { getStats as mdStats } from "../src/md-cache.js";
 import { mdOwnership, segOwnership, setupMd, setupSeg, summary } from "../src/patch-state.js";
 import { getStats as segStats } from "../src/seg-cache.js";
-import { resolvePiRoot, resolveThemeModule } from "../scripts/resolve-pi.mjs";
+import { resolveLiveTuiModule, resolvePiRoot, resolveThemeModule } from "../scripts/resolve-pi.mjs";
 
 const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
 
@@ -81,6 +84,24 @@ async function loadMarkdownTheme(): Promise<object | null> {
 export default async function (pi: ExtensionAPI) {
 	// Evaluate each patch INDEPENDENTLY; failures never cross over.
 	const theme = await loadMarkdownTheme();
+	// Patch what pi runs, not what npm installed beside it: since 0.84.3 the
+	// renderer lives in pi's own bundle and the package copy is never loaded.
+	// Measured on a live session — 0 calls through the package, 50 through the
+	// bundle. Older layouts have no bundle; there the package IS the renderer.
+	let Markdown = PackageMarkdown;
+	let getCapabilities = packageGetCapabilities;
+	let rendererSource = "package";
+	try {
+		const live = await resolveLiveTuiModule(resolvePiRoot().root);
+		if (live) {
+			Markdown = live.module.Markdown;
+			getCapabilities = live.module.getCapabilities;
+			rendererSource = `bundle:${live.path.split("/").pop()}`;
+		}
+	} catch {
+		// fall back to the package; /rcstats reports which one was patched
+	}
+
 	const md = setupMd({ Markdown, getCapabilities, theme, budgetChars: 2_000_000 });
 	const seg = setupSeg({ budgetChars: 2_000_000 });
 
