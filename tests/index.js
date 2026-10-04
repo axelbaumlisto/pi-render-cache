@@ -8,3 +8,5 @@ import "./split.test.js";
 import "./seg-cache.test.js";
 import "./md-cache.test.js";
 import "./extension.test.js";
+import "./theme-resolve.test.js";
+import "./managed-install.test.js";
