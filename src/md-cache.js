@@ -206,17 +206,30 @@ function makePatchedRender(state) {
 			return this.cachedLines;
 		}
 		// (b) Non-cacheable configurations → orig entirely.
+		const optionKeys = this.options != null ? Object.keys(this.options) : [];
+		const transform = typeof this.options?.transform === "function" ? this.options.transform : undefined;
 		if (
 			typeof this.text !== "string" ||
 			this.paddingY > 0 ||
 			this.defaultTextStyle != null ||
-			(this.options != null && Object.keys(this.options).length > 0)
+			optionKeys.some((k) => k !== "transform") ||
+			(optionKeys.length > 0 && transform === undefined)
 		) {
 			counters.fallbacks++;
 			return orig.call(this, width);
 		}
+		// (b1) Apply the host's markdown transform (pi >= 1.0 always passes one)
+		// so the split and cache operate on the same text the original renderer
+		// uses. Width is part of the cache key, so a width-dependent transform is
+		// sound; a stateful one is caught by the miss-time self-verification.
+		let sourceText = this.text;
+		if (transform !== undefined) {
+			const contentWidth = Math.max(1, width - this.paddingX * 2);
+			const transformed = transform(this.text, contentWidth);
+			if (transformed != null) sourceText = transformed;
+		}
 		// (g-pre) Empty/whitespace text: orig handles []-semantics + instance cache.
-		if (!this.text || this.text.trim() === "") return orig.call(this, width);
+		if (!sourceText || sourceText.trim() === "") return orig.call(this, width);
 		// (b2) Theme failed a previous differential self-verification → orig forever.
 		if (this.theme !== null && typeof this.theme === "object" && blacklist.has(this.theme)) {
 			counters.fallbacks++;
@@ -228,7 +241,7 @@ function makePatchedRender(state) {
 		let tail;
 		try {
 			// (c) Conservative split; hazards → settled "" → orig path entirely.
-			({ settled, tail } = splitSettled(this.text));
+			({ settled, tail } = splitSettled(sourceText));
 			if (settled === "" || endsWithIndentedCode(settled)) {
 				counters.fallbacks++;
 				return orig.call(this, width);
