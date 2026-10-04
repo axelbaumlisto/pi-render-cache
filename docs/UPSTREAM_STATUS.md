@@ -1,6 +1,6 @@
 # Upstream status and release evidence
 
-## Managed installs (v1.2.3)
+## Managed installs (v1.2.3, completed in v1.2.4)
 
 pi 1.0.1 introduced a managed install: the `pi` on `PATH` is a shell launcher under `~/.pi/agent/bin`, and the package
 sits in `~/.pi/agent/install/releases/<version>/node_modules/@earendil-works/pi-coding-agent`. Resolving the theme
@@ -8,6 +8,13 @@ module by walking the filesystem up from the launcher therefore found nothing, a
 `unsupported: markdown theme unavailable for differential canary` after `pi update`. The theme is now taken from the
 host package (`import("@earendil-works/pi-coding-agent")`, which re-exports `getMarkdownTheme`), so the layout no
 longer matters; the filesystem walk stays as the fallback for `PI_PACKAGE_ROOT` fixtures.
+
+That fixed the cache itself but not everything else built on `scripts/resolve-pi.mjs`: `/rcstats` printed
+`pi ?/pi-tui ?`, and `npm run compat`, `compat:matrix` and the benchmarks could not run at all on a managed host.
+v1.2.4 therefore teaches the resolver the layout once, for every consumer: a `pi` on PATH that is not inside a
+package is treated as a launcher, `<agentDir>/install/current-version` names the active release, and the package is
+read from `<agentDir>/install/releases/<version>/node_modules/`. A missing `current-version` accepts a single present
+release; several releases, or a stale pointer, resolve to nothing rather than to a guessed version.
 
 ## Supported pi line (v1.2.2)
 

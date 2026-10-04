@@ -54,6 +54,50 @@ function findPackageRootUp(startPath, expectedName) {
  * @returns {{root: string, version: string, source: "env"|"require"|"path-binary"}}
  * @throws {Error} actionable message when pi cannot be located
  */
+/**
+ * pi >= 1.0.1 managed install: the `pi` on PATH is a shell launcher in
+ * `<agentDir>/bin`, and the real package lives in
+ * `<agentDir>/install/releases/<version>/node_modules/@earendil-works/pi-coding-agent`.
+ * Walking up from the launcher therefore finds no package at all.
+ *
+ * `current-version` names the active release; when it is missing or stale we
+ * accept a single present release rather than guessing between several.
+ * @param {string} launcherPath canonical path of the `pi` on PATH
+ * @returns {{root: string, version: string, source: string} | null}
+ */
+function resolveManagedInstall(launcherPath) {
+	const agentDir = path.dirname(path.dirname(launcherPath));
+	const releases = path.join(agentDir, "install", "releases");
+	if (!fs.existsSync(releases)) return null;
+
+	const candidates = [];
+	try {
+		const current = fs.readFileSync(path.join(agentDir, "install", "current-version"), "utf8").trim();
+		if (current) candidates.push(current);
+	} catch {
+		/* no current-version file — fall back to a sole release below */
+	}
+	if (candidates.length === 0) {
+		let entries = [];
+		try {
+			entries = fs.readdirSync(releases);
+		} catch {
+			return null;
+		}
+		if (entries.length !== 1) return null;
+		candidates.push(entries[0]);
+	}
+
+	for (const version of candidates) {
+		const root = path.join(releases, version, "node_modules", ...PI_PKG.split("/"));
+		const pkg = readPkg(root);
+		if (pkg && pkg.name === PI_PKG) {
+			return { root: fs.realpathSync(root), version: pkg.version, source: "managed-install" };
+		}
+	}
+	return null;
+}
+
 export function resolvePiRoot() {
 	// 1. Explicit override (fixtures, CI matrix).
 	const envRoot = process.env.PI_PACKAGE_ROOT;
@@ -85,7 +129,8 @@ export function resolvePiRoot() {
 		// fall through to PATH lookup
 	}
 
-	// 3. `pi` binary on PATH → realpath → walk up to the package root.
+	// 3. `pi` binary on PATH → realpath → walk up to the package root, or read
+	//    the managed install it launches.
 	try {
 		const whichCmd = process.platform === "win32" ? "where" : "which";
 		const binPath = execFileSync(whichCmd, ["pi"], { encoding: "utf8" }).split("\n")[0].trim();
@@ -96,6 +141,8 @@ export function resolvePiRoot() {
 				const pkg = readPkg(root);
 				return { root: fs.realpathSync(root), version: pkg.version, source: "path-binary" };
 			}
+			const managed = resolveManagedInstall(real);
+			if (managed) return managed;
 		}
 	} catch {
 		// fall through to error
