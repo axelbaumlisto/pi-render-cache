@@ -1,5 +1,36 @@
 # Upstream status and release evidence
 
+## pi 1.x: the premise this extension was built on is gone (v1.4.0, 2026-10-04)
+
+Measured on released pi 1.0.2, through a real pi in a pty, with the extension
+out of the way:
+
+- **A streamed answer never touches `Markdown`.** Patching `addChild` on every
+  container class in the TUI shows what the assistant message is made of while
+  it streams: `ExpandableText`, `Container`, `Spacer`. Not one `Markdown`
+  instance is constructed, and `Markdown.prototype.render` is called zero times
+  for the whole session. `ExpandableText extends ThemedText` and contains no
+  markdown at all.
+- **Repeats are the host's business now.** `renderCached(context, component,
+  width)` keeps rendered lines per component and width, on top of the lines a
+  `Markdown` instance already caches for itself. Four live sessions (240, 98,
+  85, 76 MB), resumed, scrolled and streamed into: 222 misses for this cache,
+  zero hits.
+- **So the markdown half costs and returns nothing.** Same work, the classes a
+  real pi loads, 6600 lines, five runs, medians: none 87.3 ms, segment cache
+  81.3 ms (1.07x), markdown cache 104.7 ms (0.83x), both 99.2 ms (0.88x). The
+  markdown run had 240 hits out of 360 and still lost: keying costs a theme
+  fingerprint probe and a hash of the whole text.
+
+v1.4.0 therefore installs the markdown cache on pi 0.x, and on 1.x only when
+asked (`PI_RENDER_CACHE_MD=1`). The segment cache is unchanged and stays on.
+
+Note what this corrects below: the 1.0.0 re-check recorded that
+`AssistantMessageComponent.updateContent()` still rebuilds `Markdown` per
+update. That code is still in the bundle, but it is not what renders a streamed
+answer in 1.0.2 — reading the source said one thing, and measuring the running
+program said another.
+
 ## Managed installs (v1.2.3, completed in v1.2.4)
 
 pi 1.0.1 introduced a managed install: the `pi` on `PATH` is a shell launcher under `~/.pi/agent/bin`, and the package
