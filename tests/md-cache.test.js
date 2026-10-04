@@ -795,7 +795,7 @@ test("matching-but-throw-once callback documents unsupported consumed-throw boun
   }
 });
 
-test("I6 fallbacks: paddingY=1 / options / defaultTextStyle → counter grows, output === orig", () => {
+test("I6: unsupported shapes fall back; padding and style are cached, output === orig", () => {
   install({ Markdown, getCapabilities });
   try {
     const doc = "# H\n\n1. one\n2. two\n\npara body\n";
@@ -814,6 +814,16 @@ test("I6 fallbacks: paddingY=1 / options / defaultTextStyle → counter grows, o
       ],
       ["non-string text", () => new Markdown(undefined, 1, 0, mdTheme)],
     ];
+    // Every shape here falls back, for two different reasons: options this
+    // cache cannot reason about and a non-string text are unsupported outright,
+    // while padding and style are supported only above the length where the
+    // whole-text entry pays for its key — this document is far below it.
+    const mustFallBack = new Set([
+      "paddingY=1",
+      "options",
+      "defaultTextStyle",
+      "non-string text",
+    ]);
     for (const [name, make] of cases) {
       const f0 = getStats().fallbacks;
       assert.deepEqual(
@@ -821,9 +831,10 @@ test("I6 fallbacks: paddingY=1 / options / defaultTextStyle → counter grows, o
         origRender.call(make(), 80),
         `${name}: output === orig`,
       );
-      assert.ok(
+      assert.equal(
         getStats().fallbacks > f0,
-        `${name}: fallback counter must grow`,
+        mustFallBack.has(name),
+        `${name}: wrong path taken`,
       );
     }
   } finally {
@@ -831,7 +842,7 @@ test("I6 fallbacks: paddingY=1 / options / defaultTextStyle → counter grows, o
   }
 });
 
-test("defaultTextStyle fallback never probes a counter callback", () => {
+test("a short styled render is left alone; a long one is cached", () => {
   const makeTheme = (state) => ({
     ...mdTheme,
     heading(text) {
@@ -839,23 +850,46 @@ test("defaultTextStyle fallback never probes a counter callback", () => {
       return mdTheme.heading(text);
     },
   });
-  const pristineState = { calls: 0 };
-  const patchedState = { calls: 0 };
-  const doc = "# Styled heading\n\nbody text\n";
-  const pristine = new Markdown(doc, 1, 0, makeTheme(pristineState), {
-    italic: true,
-  });
-  const patched = new Markdown(doc, 1, 0, makeTheme(patchedState), {
-    italic: true,
-  });
-  const expected = origRender.call(pristine, 80);
+  const short = "# Styled heading\n\nbody text\n";
+  const long = `# Styled heading\n\n${"a thinking block goes on and on. ".repeat(20)}\n`;
+  const shortState = { calls: 0 };
+  const shortTheme = makeTheme(shortState);
   install({ Markdown, getCapabilities });
   try {
-    assert.deepEqual(patched.render(80), expected);
+    // Short: keying costs a fingerprint probe the render would not have paid.
+    const baselineState = { calls: 0 };
+    const expectedShort = origRender.call(
+      new Markdown(short, 1, 0, makeTheme(baselineState), { italic: true }),
+      80,
+    );
+    const before = shortState.calls;
+    assert.deepEqual(
+      new Markdown(short, 1, 0, shortTheme, { italic: true }).render(80),
+      expectedShort,
+    );
     assert.equal(
-      patchedState.calls,
-      pristineState.calls,
-      "patched path adds zero callback probes",
+      shortState.calls - before,
+      baselineState.calls,
+      "a short styled render must cost exactly what the original costs",
+    );
+
+    // Long: the whole-text entry pays for itself, and a repeat is a hit.
+    const expectedLong = origRender.call(
+      new Markdown(long, 1, 0, makeTheme({ calls: 0 }), { italic: true }),
+      80,
+    );
+    assert.deepEqual(
+      new Markdown(long, 1, 0, mdTheme, { italic: true }).render(80),
+      expectedLong,
+    );
+    const hitsBefore = getStats().hits;
+    assert.deepEqual(
+      new Markdown(long, 1, 0, mdTheme, { italic: true }).render(80),
+      expectedLong,
+    );
+    assert.ok(
+      getStats().hits > hitsBefore,
+      "a repeated styled render must be a hit",
     );
   } finally {
     uninstall();

@@ -83,6 +83,36 @@ export const CORE_THEME_KEYS = Object.freeze(
  * sampled against a full original render and a source that ever disagrees is
  * never cached again.
  */
+/**
+ * A value-based key for a plain data object, or null when it holds anything
+ * this cannot see through. Keys are sorted so two objects built in different
+ * orders agree.
+ */
+export function canonicalValue(value, depth = 0) {
+  if (value === null) return "null";
+  const type = typeof value;
+  if (type === "undefined") return "undefined";
+  if (type === "string") return JSON.stringify(value);
+  if (type === "number" || type === "boolean") return String(value);
+  // A text style carries its colours as functions (color, bgColor), rebuilt
+  // per component like transforms are. Same rule: keyed by source, checked by
+  // the sampled verification that follows a hit.
+  if (type === "function") return identify(value);
+  if (type !== "object" || depth > 4) return null;
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => canonicalValue(item, depth + 1));
+    return parts.some((part) => part === null) ? null : `[${parts.join(",")}]`;
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype) return null;
+  const parts = [];
+  for (const key of Object.keys(value).sort()) {
+    const part = canonicalValue(value[key], depth + 1);
+    if (part === null) return null;
+    parts.push(`${key}:${part}`);
+  }
+  return `{${parts.join(",")}}`;
+}
+
 const identities = new WeakMap();
 let nextIdentity = 0;
 export function identify(value) {
@@ -258,6 +288,14 @@ function endsWithIndentedCode(settled) {
 // to the miss itself and catches renderer/theme drift without any allowlist.
 /** Transform sources whose sampled verification disagreed with the original. */
 const blacklistedSources = new Set();
+/**
+ * Keying a styled or padded render costs a theme fingerprint probe, which is
+ * recomputed on purpose so a theme recoloured in place is noticed. On a short
+ * label that probe costs more than the render it would save, so only texts
+ * long enough to pay for it take this path. Thinking blocks — the renders that
+ * make reasoning models painful — are far longer than this.
+ */
+const WHOLE_MIN_CHARS = 400;
 const VERIFY_FIRST_FILLS = 2;
 const VERIFY_SAMPLE_EVERY = 32;
 
@@ -274,12 +312,26 @@ function makePatchedRender(state) {
       return this.cachedLines;
     }
     // (b) Non-cacheable configurations → orig entirely.
-    if (
-      typeof this.text !== "string" ||
-      this.paddingY > 0 ||
-      this.defaultTextStyle != null
-    ) {
-      fallback(counters, "styled-or-padded");
+    if (typeof this.text !== "string") {
+      fallback(counters, "text-not-a-string");
+      return orig.call(this, width);
+    }
+    // Thinking blocks carry a text style, and pi allocates a fresh style object
+    // per component exactly as it does transforms: 24 styled renders a session
+    // held 21 distinct objects and two distinct values ({} and {italic:true}).
+    // They are the renders that make reasoning models painful, so they are
+    // keyed by value. A style that will not serialise is left to the original.
+    const styleId =
+      this.defaultTextStyle == null
+        ? ""
+        : canonicalValue(this.defaultTextStyle);
+    if (styleId === null) {
+      fallback(counters, "exotic-style");
+      return orig.call(this, width);
+    }
+    const needsWholeEntry = this.defaultTextStyle != null || this.paddingY > 0;
+    if (needsWholeEntry && this.text.length < WHOLE_MIN_CHARS) {
+      fallback(counters, "too-short-to-pay");
       return orig.call(this, width);
     }
     // pi 1.0.x hands every assistant message a transform in options, which
@@ -339,6 +391,8 @@ function makePatchedRender(state) {
       const keyBase = [
         String(width),
         String(this.paddingX),
+        String(this.paddingY),
+        styleId,
         signatureHash,
         fingerprintHash,
         hyperlinksBit,
@@ -371,8 +425,13 @@ function makePatchedRender(state) {
         return whole.slice();
       }
 
-      // (c) Conservative split; hazards → settled "" → whole-text entry.
-      ({ settled, tail } = splitSettled(this.text));
+      // (c) Conservative split; hazards → settled "" → whole-text entry. The
+      // split renders scratch instances that carry neither padding nor style,
+      // so anything that has them can only use the whole-text entry above.
+      const splittable = this.paddingY === 0 && this.defaultTextStyle == null;
+      ({ settled, tail } = splittable
+        ? splitSettled(this.text)
+        : { settled: "", tail: "" });
       if (settled === "" || endsWithIndentedCode(settled)) {
         counters.misses++;
         const full = orig.call(this, width);
