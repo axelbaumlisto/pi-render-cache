@@ -11,7 +11,10 @@
  * So this runs pi for real, in a pty, with an extension that counts calls on
  * the prototype the extension patches, and fails when the count is zero.
  *
- * Usage: node scripts/verify-live.mjs [--prompt "..."] [--seconds 40]
+ * Two paths render differently: a fresh session streaming an answer, and a
+ * resumed transcript. Pass --session to check the second one.
+ *
+ * Usage: node scripts/verify-live.mjs [--prompt "..."] [--seconds 40] [--session <path>]
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -25,6 +28,7 @@ const flag = (name, fallback) => {
 };
 const PROMPT = flag("prompt", "Напиши три абзаца про кэширование, со списком и **жирным**");
 const SECONDS = Number(flag("seconds", 40));
+const SESSION = flag("session", null);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-live-"));
 const log = path.join(dir, "calls.log");
 const probe = path.join(dir, "probe.ts");
@@ -52,9 +56,16 @@ export default async function () {
 		const mod: any = live ? live.module : await import("@earendil-works/pi-tui");
 		const where = live ? live.path.split("/").pop() : "package";
 		let calls = 0;
+		let self = 0;
 		const orig = mod.Markdown.prototype.render;
-		mod.Markdown.prototype.render = function (...a: any[]) { calls++; return orig.apply(this, a); };
-		const timer = setInterval(() => fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify({ calls, where })), 2000);
+		mod.Markdown.prototype.render = function (...a: any[]) {
+			// The extension renders samples to verify its own patch. Counting
+			// those as proof is how a dead patch passed for six weeks.
+			if ((new Error().stack ?? "").includes("canaryVerify")) self++;
+			else calls++;
+			return orig.apply(this, a);
+		};
+		const timer = setInterval(() => fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify({ calls, self, where })), 2000);
 		(timer as any).unref?.();
 	} catch (e: any) {
 		fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify({ error: String(e?.message ?? e) }));
@@ -66,7 +77,8 @@ export default async function () {
 // A real pty, a real terminal size: an 80x24 default renders so little that a
 // broken patch can still look busy.
 const runner = path.join(dir, "run.sh");
-fs.writeFileSync(runner, `stty rows 50 cols 160 2>/dev/null\nexec "${piBin}" -e "${probe}"\n`);
+const sessionArg = SESSION ? ` --session ${JSON.stringify(SESSION)}` : "";
+fs.writeFileSync(runner, `stty rows 50 cols 160 2>/dev/null\nexec "${piBin}"${sessionArg} -e "${probe}"\n`);
 
 const driver = `printf '%s\\n' ${JSON.stringify(PROMPT)}; sleep ${SECONDS}; printf '\\003'; sleep 1; printf '\\003'; sleep 1`;
 spawnSync("sh", ["-lc", `(${driver}) | script -q /dev/null sh ${runner} > /dev/null 2>&1`], {
@@ -86,10 +98,11 @@ if (result.error) {
 	console.error(`проба не смогла пропатчить рендерер: ${result.error}`);
 	process.exit(1);
 }
+console.log(`режим: ${SESSION ? "возобновление сессии" : "новая сессия с потоком ответа"}`);
 console.log(`патч стоит на: ${result.where}`);
-console.log(`вызовов Markdown.render за сессию: ${result.calls}`);
+console.log(`вызовов из pi: ${result.calls} | из собственной самопроверки: ${result.self ?? 0}`);
 if (!result.calls) {
-	console.error("НОЛЬ вызовов — патч не доходит до рендера живой сессии");
+	console.error("НОЛЬ вызовов из pi — этот путь отрисовки хозяин не использует");
 	process.exit(1);
 }
-console.log("PASS: патч работает в настоящей сессии");
+console.log("PASS: pi действительно зовёт пропатченный рендер");

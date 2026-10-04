@@ -35,6 +35,7 @@ import {
 import { getStats as mdStats } from "../src/md-cache.js";
 import { mdOwnership, segOwnership, setupMd, setupSeg, summary } from "../src/patch-state.js";
 import { getStats as segStats } from "../src/seg-cache.js";
+import { getStats as metricsStats, install as installMetrics, metricsLine } from "../src/metrics.js";
 import { reachLine } from "../src/stats.js";
 import { resolveLiveTuiModule, resolvePiRoot, resolveThemeModule } from "../scripts/resolve-pi.mjs";
 
@@ -104,6 +105,14 @@ export default async function (pi: ExtensionAPI) {
 	}
 
 	const md = setupMd({ Markdown, getCapabilities, theme, budgetChars: 2_000_000 });
+	// Counters for the session you are actually in — see src/metrics.js for why
+	// no scripted run can stand in for one.
+	try {
+		const live = await resolveLiveTuiModule(resolvePiRoot().root);
+		if (live?.module?.TuiMainScreen) installMetrics({ TuiMainScreen: live.module.TuiMainScreen, Markdown });
+	} catch {
+		// counters are a diagnostic, never a reason to fail startup
+	}
 	const seg = setupSeg({ budgetChars: 2_000_000 });
 
 	// Notify only when something is NOT active, with per-patch reason.
@@ -138,7 +147,7 @@ export default async function (pi: ExtensionAPI) {
 			// this extension stayed a no-op for six weeks after pi bundled its TUI, so
 			// say out loud whether the renderer has actually called it.
 			ctx.ui.notify(
-				`${reachLine(rendererSource, m)}\n` +
+				`${reachLine(rendererSource, m)}\n${metricsLine(metricsStats())}\n` +
 					`md ${fmt(s.md)} own=${mdOwnership(Markdown)} h${m.hits}/m${m.misses}/f${m.fallbacks} size ${m.size} chars ${m.chars} | ` +
 					`seg ${fmt(s.seg)} own=${segOwnership()} h${g.hits}/m${g.misses}/f${g.fallbacks} size ${g.size} chars ${g.chars} | ` +
 					versions,
