@@ -57,3 +57,17 @@ export function makeBudgetCache(budgetChars = 2_000_000) {
 		},
 	};
 }
+
+/**
+ * One line saying where the patch sits and whether the renderer ever called it.
+ *
+ * "active" only means installed. Reporting that alone is what let this
+ * extension sit dead for six weeks after pi inlined its TUI into its own
+ * bundle, so a patch nobody calls has to say so in plain words.
+ */
+export function reachLine(rendererSource, counters) {
+	const calls = counters.hits + counters.misses + counters.fallbacks;
+	return calls === 0
+		? `patched ${rendererSource} | NOT REACHING THE RENDERER (0 calls)`
+		: `patched ${rendererSource} | ${calls} calls`;
+}

@@ -11,3 +11,4 @@ import "./extension.test.js";
 import "./theme-resolve.test.js";
 import "./managed-install.test.js";
 import "./live-module.test.js";
+import "./reach-line.test.js";

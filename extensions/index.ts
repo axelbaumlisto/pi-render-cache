@@ -35,6 +35,7 @@ import {
 import { getStats as mdStats } from "../src/md-cache.js";
 import { mdOwnership, segOwnership, setupMd, setupSeg, summary } from "../src/patch-state.js";
 import { getStats as segStats } from "../src/seg-cache.js";
+import { reachLine } from "../src/stats.js";
 import { resolveLiveTuiModule, resolvePiRoot, resolveThemeModule } from "../scripts/resolve-pi.mjs";
 
 const THEME_KEY = Symbol.for("@earendil-works/pi-coding-agent:theme");
@@ -133,8 +134,12 @@ export default async function (pi: ExtensionAPI) {
 			} catch {
 				// resolver unavailable (unusual install layout) → versions stay unknown
 			}
+			// "active" only says the patch is installed. Reporting that alone is how
+			// this extension stayed a no-op for six weeks after pi bundled its TUI, so
+			// say out loud whether the renderer has actually called it.
 			ctx.ui.notify(
-				`md ${fmt(s.md)} own=${mdOwnership(Markdown)} h${m.hits}/m${m.misses}/f${m.fallbacks} size ${m.size} chars ${m.chars} | ` +
+				`${reachLine(rendererSource, m)}\n` +
+					`md ${fmt(s.md)} own=${mdOwnership(Markdown)} h${m.hits}/m${m.misses}/f${m.fallbacks} size ${m.size} chars ${m.chars} | ` +
 					`seg ${fmt(s.seg)} own=${segOwnership()} h${g.hits}/m${g.misses}/f${g.fallbacks} size ${g.size} chars ${g.chars} | ` +
 					versions,
 				"info",
