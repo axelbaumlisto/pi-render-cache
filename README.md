@@ -1,5 +1,29 @@
 # pi-render-cache
 
+> **Status: this extension has no measurable effect from pi 1.0 on, and is no
+> longer installed on any machine here.** It was written for the pi line that
+> rebuilt the whole assistant message on every streamed chunk. pi 1.0 renders
+> that message through `ExpandableText` instead of `Markdown`, keeps a render
+> cache of its own, and left nothing here to win.
+>
+> Measured on pi 1.0.2, same scenario, three runs each, a resumed 224 MB
+> session scrolled through its history: **2.5 s of CPU with the extension and
+> 2.5 s without it**, every run. All the grapheme segmentation in that session
+> amounts to 17.3 ms against 2.5 s of CPU, so there is nothing left to save.
+> The markdown half is worse than nothing on 1.x and v1.4.0 turned it off.
+>
+> What does cost a core in a long session is not this: the whole component tree
+> is rendered on every frame — 411 components a frame in a 224 MB session
+> against 24 in a fresh one, at 8-10 ms a frame — and pi's own render cache is
+> built fresh inside each `renderLayoutFrame`. That has to be fixed where the
+> layout owns its state; an external cache that skips container renders returns
+> stale lines (six of 49 verified hits). The evidence is in
+> [`research/cpu-kit/FINDINGS.md`](research/cpu-kit/FINDINGS.md), with the
+> probes that produced it.
+>
+> On pi 0.x both caches still do what the rest of this README describes. Older
+> published versions are left alone for anyone still there.
+
 **Reduces pi coding-agent TUI rendering work while a model streams, without changing rendered output.**
 
 The extension applies two independent, bounded caches inside pi's process: one for repeated `Intl.Segmenter` results and one for stable prefixes of unstyled streaming Markdown. Each patch has its own compatibility and ownership state and falls back to the original implementation on unsupported input.
