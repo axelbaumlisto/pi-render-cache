@@ -1,0 +1,1 @@
+{"probe":"classes","classes":{"Box":{"calls":627,"selfMs":12.5},"Container":{"calls":2758,"selfMs":137.3},"Editor":{"calls":21,"selfMs":1.3},"Markdown":{"calls":684,"selfMs":83},"MouseRegion":{"calls":1406,"selfMs":0.5},"Spacer":{"calls":2092,"selfMs":0.4},"Text":{"calls":1128,"selfMs":30.5}}}
