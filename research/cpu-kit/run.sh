@@ -9,12 +9,13 @@ PROBE="${1:?укажите зонд: frames|classes|children|segmenter|triggers}
 SESSION="${2:-}"
 SECONDS_TOTAL="${3:-60}"
 SCENARIO="${4:-mixed}"
-OUT="${KIT_OUT:-/tmp/kit-$PROBE.json}"
+TMP="${TMPDIR:-/tmp}"   # в Termux /tmp недоступен на запись
+OUT="${KIT_OUT:-$TMP/kit-$PROBE.json}"
 
 [ -f "$KIT/probes/$PROBE.ts" ] || { echo "нет такого зонда: $PROBE"; exit 2; }
 command -v pi >/dev/null || { echo "pi не найден в PATH"; exit 2; }
 
-RUNNER=$(mktemp /tmp/kit-run-XXXX.sh)
+RUNNER=$(mktemp "$TMP/kit-run-XXXX.sh")
 cat > "$RUNNER" <<RUN
 stty rows ${KIT_ROWS:-50} cols ${KIT_COLS:-160} 2>/dev/null
 export KIT_OUT="$OUT"
@@ -35,6 +36,11 @@ drive() {
 }
 
 rm -f "$OUT"
-drive | timeout $((SECONDS_TOTAL + 45)) script -q /dev/null bash "$RUNNER" >/dev/null 2>&1
+# script на BSD и на Linux вызывается по-разному; Termux — это Linux.
+if script -q /dev/null true >/dev/null 2>&1; then
+  drive | timeout $((SECONDS_TOTAL + 45)) script -q /dev/null bash "$RUNNER" >/dev/null 2>&1
+else
+  drive | timeout $((SECONDS_TOTAL + 45)) script -qec "bash $RUNNER" /dev/null >/dev/null 2>&1
+fi
 rm -f "$RUNNER"
 [ -f "$OUT" ] && cat "$OUT" || { echo '{"error":"зонд ничего не записал"}'; exit 1; }

@@ -35,7 +35,7 @@ export async function liveTui(root = piRoot()) {
 }
 
 export function writer(name) {
-	const out = process.env.KIT_OUT ?? `/tmp/kit-${name}.json`;
+	const out = process.env.KIT_OUT ?? `${process.env.TMPDIR ?? "/tmp"}/kit-${name}.json`;
 	return (data) => {
 		try {
 			fs.writeFileSync(out, JSON.stringify({ probe: name, ...data }));
